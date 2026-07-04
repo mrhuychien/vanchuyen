@@ -1,0 +1,24 @@
+[
+ {
+  "doctype": "Role",
+  "name": "Điều Phối Vận Chuyển",
+  "role_name": "Điều Phối Vận Chuyển",
+  "desk_access": 1,
+  "disabled": 0,
+  "is_custom": 1,
+  "restrict_to_domain": null,
+  "home_page": null,
+  "two_factor_auth": 0
+ },
+ {
+  "doctype": "Role",
+  "name": "Lái Xe",
+  "role_name": "Lái Xe",
+  "desk_access": 0,
+  "disabled": 0,
+  "is_custom": 1,
+  "restrict_to_domain": null,
+  "home_page": null,
+  "two_factor_auth": 0
+ }
+]

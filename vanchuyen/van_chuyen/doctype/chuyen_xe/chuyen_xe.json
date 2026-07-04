@@ -1,0 +1,192 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-01-01 00:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "ngay_giao",
+  "trang_thai",
+  "col_break_head",
+  "lai_xe",
+  "ten_lai_xe",
+  "sdt_lai_xe",
+  "sec_xe",
+  "xe",
+  "the_tich_xe",
+  "sec_don_hang",
+  "don_hang",
+  "sec_tong_hop",
+  "tong_don",
+  "tong_kien",
+  "col_break_tong",
+  "tong_the_tich",
+  "ti_le_tai",
+  "sec_ghi_chu",
+  "ghi_chu"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "CX-.YYYY.-.####",
+   "print_hide": 1,
+   "set_only_once": 1
+  },
+  {
+   "default": "Today",
+   "fieldname": "ngay_giao",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Ngày giao",
+   "reqd": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "default": "Nháp",
+   "fieldname": "trang_thai",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Trạng thái",
+   "options": "Nháp\nĐang giao\nHoàn thành",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "lai_xe",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Lái xe",
+   "options": "Driver",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "lai_xe.full_name",
+   "fieldname": "ten_lai_xe",
+   "fieldtype": "Data",
+   "label": "Tên lái xe",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "lai_xe.cell_number",
+   "fieldname": "sdt_lai_xe",
+   "fieldtype": "Data",
+   "label": "SĐT lái xe",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_xe",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "xe",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Xe",
+   "options": "Vehicle",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "xe.custom_the_tich_kha_dung",
+   "fieldname": "the_tich_xe",
+   "fieldtype": "Float",
+   "label": "Thể tích xe (m³)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_don_hang",
+   "fieldtype": "Section Break",
+   "label": "Đơn hàng"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "don_hang",
+   "fieldtype": "Table",
+   "label": "Đơn hàng",
+   "options": "Chuyen Xe Don Hang",
+   "reqd": 1
+  },
+  {
+   "fieldname": "sec_tong_hop",
+   "fieldtype": "Section Break",
+   "label": "Tổng hợp"
+  },
+  {
+   "fieldname": "tong_don",
+   "fieldtype": "Int",
+   "label": "Tổng số đơn",
+   "read_only": 1
+  },
+  {
+   "fieldname": "tong_kien",
+   "fieldtype": "Float",
+   "label": "Tổng kiện",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_tong",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "tong_the_tich",
+   "fieldtype": "Float",
+   "label": "Tổng thể tích (m³)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ti_le_tai",
+   "fieldtype": "Percent",
+   "label": "Tỉ lệ tải (%)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_ghi_chu",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "ghi_chu",
+   "fieldtype": "Small Text",
+   "label": "Ghi chú"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-01-01 00:00:00",
+ "module": "Van Chuyen",
+ "name": "Chuyen Xe",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

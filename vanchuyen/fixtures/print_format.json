@@ -1,0 +1,18 @@
+[
+ {
+  "doctype": "Print Format",
+  "name": "Phieu Giao Hang Chuyen Xe",
+  "doc_type": "Chuyen Xe",
+  "module": "Van Chuyen",
+  "print_format_type": "Jinja",
+  "standard": "Yes",
+  "disabled": 0,
+  "font_size": 11,
+  "margin_top": 12.0,
+  "margin_bottom": 12.0,
+  "margin_left": 12.0,
+  "margin_right": 12.0,
+  "default_print_language": "vi",
+  "html": "<div class=\"pgh\">\n  <div class=\"pgh-head\">\n    <div class=\"pgh-company\">{{ frappe.db.get_single_value('Global Defaults', 'default_company') or '' }}</div>\n    <div class=\"pgh-title\">PHIẾU GIAO HÀNG — {{ doc.name }}</div>\n    <div class=\"pgh-sub\">Ngày giao: {{ frappe.utils.formatdate(doc.ngay_giao, 'dd/MM/yyyy') }}</div>\n  </div>\n\n  <table class=\"pgh-info\">\n    <tr>\n      <td><span class=\"lbl\">Lái xe:</span> {{ doc.ten_lai_xe or doc.lai_xe or '' }}</td>\n      <td><span class=\"lbl\">SĐT:</span> {{ doc.sdt_lai_xe or '' }}</td>\n      <td><span class=\"lbl\">Biển số:</span> {{ doc.xe or '' }}</td>\n    </tr>\n    <tr>\n      <td><span class=\"lbl\">Tổng đơn:</span> {{ doc.tong_don or 0 }}</td>\n      <td><span class=\"lbl\">Tổng kiện:</span> {{ '%g' % (doc.tong_kien or 0) }}</td>\n      <td><span class=\"lbl\">Tổng thể tích:</span> {{ '%.3f' % (doc.tong_the_tich or 0) }} m³</td>\n    </tr>\n  </table>\n\n  <table class=\"pgh-list\">\n    <thead>\n      <tr>\n        <th class=\"c-stt\">STT</th>\n        <th class=\"c-kh\">Khách hàng</th>\n        <th class=\"c-dc\">Địa chỉ</th>\n        <th class=\"c-po\">Số PO</th>\n        <th class=\"c-num\">Kiện</th>\n        <th class=\"c-num\">Thể tích (m³)</th>\n        <th class=\"c-sign\">Ký nhận</th>\n      </tr>\n    </thead>\n    <tbody>\n      {% for r in doc.don_hang %}\n      <tr>\n        <td class=\"c-stt\">{{ loop.index }}</td>\n        <td class=\"c-kh\">{{ r.khach_hang or '' }}</td>\n        <td class=\"c-dc\">{{ r.dia_chi or '' }}</td>\n        <td class=\"c-po\">{{ r.so_po or '' }}</td>\n        <td class=\"c-num\">{{ '%g' % (r.so_kien or 0) }}</td>\n        <td class=\"c-num\">{{ '%.3f' % (r.the_tich or 0) }}</td>\n        <td class=\"c-sign\"></td>\n      </tr>\n      {% endfor %}\n    </tbody>\n  </table>\n\n  <table class=\"pgh-foot\">\n    <tr>\n      <td>Điều phối<div class=\"sign-space\"></div>(Ký, ghi rõ họ tên)</td>\n      <td>Lái xe<div class=\"sign-space\"></div>(Ký, ghi rõ họ tên)</td>\n    </tr>\n  </table>\n</div>\n\n<style>\n  .pgh { font-family: \"Helvetica Neue\", Arial, sans-serif; color: #000; font-size: 11px; }\n  .pgh-head { text-align: center; margin-bottom: 10px; }\n  .pgh-company { font-size: 13px; font-weight: bold; text-transform: uppercase; }\n  .pgh-title { font-size: 16px; font-weight: bold; margin-top: 6px; }\n  .pgh-sub { font-size: 11px; margin-top: 2px; }\n  .pgh-info { width: 100%; border-collapse: collapse; margin-bottom: 8px; }\n  .pgh-info td { padding: 3px 6px; border: none; }\n  .pgh-info .lbl { font-weight: bold; }\n  .pgh-list { width: 100%; border-collapse: collapse; }\n  .pgh-list th, .pgh-list td { border: 1px solid #333; padding: 4px 6px; vertical-align: top; }\n  .pgh-list th { background: #f0f0f0; text-align: center; font-weight: bold; }\n  .pgh-list .c-stt { width: 6%; text-align: center; }\n  .pgh-list .c-po { width: 12%; }\n  .pgh-list .c-num { width: 9%; text-align: right; }\n  .pgh-list .c-sign { width: 18%; height: 2cm; }\n  .pgh-list tbody td { height: 1.6cm; }\n  .pgh-foot { width: 100%; margin-top: 18px; border-collapse: collapse; }\n  .pgh-foot td { width: 50%; text-align: center; font-weight: bold; vertical-align: top; padding: 6px; }\n  .pgh-foot .sign-space { height: 2.2cm; }\n  .pgh-foot td { font-weight: bold; }\n  .pgh-foot td .sign-space + * { font-weight: normal; }\n</style>"
+ }
+]

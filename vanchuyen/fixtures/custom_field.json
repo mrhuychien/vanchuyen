@@ -1,0 +1,41 @@
+[
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-custom_trang_thai_xep",
+  "dt": "Sales Invoice",
+  "fieldname": "custom_trang_thai_xep",
+  "label": "Trạng thái xếp chuyến",
+  "fieldtype": "Select",
+  "options": "\nChưa xếp\nMột phần\nĐủ",
+  "read_only": 1,
+  "allow_on_submit": 1,
+  "in_standard_filter": 1,
+  "insert_after": "custom_chuyến_xe",
+  "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Vehicle-custom_the_tich_kha_dung",
+  "dt": "Vehicle",
+  "fieldname": "custom_the_tich_kha_dung",
+  "label": "Thể tích khả dụng (m³)",
+  "fieldtype": "Float",
+  "precision": "2",
+  "description": "Thể tích xếp hàng thực tế, thường 85–90% thể tích hình học thùng xe",
+  "insert_after": "model",
+  "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Driver-custom_user",
+  "dt": "Driver",
+  "fieldname": "custom_user",
+  "label": "Tài khoản portal",
+  "fieldtype": "Link",
+  "options": "User",
+  "unique": 1,
+  "description": "User đăng nhập /vc của lái xe",
+  "insert_after": "cell_number",
+  "module": "Van Chuyen"
+ }
+]
