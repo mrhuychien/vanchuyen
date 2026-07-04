@@ -5,7 +5,6 @@ và chỉ trên chuyến đúng của tài xế. KHÔNG trả bất kỳ số ti
 import frappe
 from frappe import _
 from frappe.utils import cint, nowdate
-from frappe.utils.file_manager import save_file
 
 from vanchuyen.api.guards import require_driver, require_own_trip
 
@@ -102,7 +101,19 @@ def upload_chung_tu(trip, row_name):
 	if not upload:
 		frappe.throw(_("Thiếu file ảnh chứng từ."))
 
-	saved = save_file(upload.filename, upload.stream.read(), "Sales Invoice", sales_invoice, is_private=1)
+	# Lái Xe có ZERO quyền Sales Invoice → tạo File với ignore_permissions=True SAU guard
+	# (require_own_trip đã kiểm chuyến của tài xế + SI đúng thuộc row). save_file thường
+	# kiểm quyền write trên doc đính kèm → sẽ chặn; nên insert File thủ công.
+	saved = frappe.get_doc(
+		{
+			"doctype": "File",
+			"file_name": upload.filename or "chungtu.jpg",
+			"attached_to_doctype": "Sales Invoice",
+			"attached_to_name": sales_invoice,
+			"is_private": 1,
+			"content": upload.stream.read(),
+		}
+	).insert(ignore_permissions=True)
 
 	new_count = cint(frappe.db.get_value("Chuyen Xe Don Hang", row_name, "so_chung_tu")) + 1
 	# so_chung_tu là allow_on_submit read_only → set thẳng DB, không cần full save.
