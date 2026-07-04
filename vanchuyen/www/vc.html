@@ -1,0 +1,67 @@
+{% extends "templates/web.html" %}
+
+{% block title %}Vận chuyển{% endblock %}
+
+{% block head_include %}
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<link rel="stylesheet" href="/assets/vanchuyen/vanchuyen/shell.css?v={{ vc_context.assetVersion }}" />
+
+{# Luật vàng #1: import map remap MỌI shared module (lib + components) sang ?v= #}
+<script type="importmap">
+{
+  "imports": {
+    "/assets/vanchuyen/vanchuyen/lib/format.js": "/assets/vanchuyen/vanchuyen/lib/format.js?v={{ vc_context.assetVersion }}",
+    "/assets/vanchuyen/vanchuyen/lib/dom.js": "/assets/vanchuyen/vanchuyen/lib/dom.js?v={{ vc_context.assetVersion }}",
+    "/assets/vanchuyen/vanchuyen/lib/router.js": "/assets/vanchuyen/vanchuyen/lib/router.js?v={{ vc_context.assetVersion }}",
+    "/assets/vanchuyen/vanchuyen/lib/api.js": "/assets/vanchuyen/vanchuyen/lib/api.js?v={{ vc_context.assetVersion }}",
+    "/assets/vanchuyen/vanchuyen/components/toast.js": "/assets/vanchuyen/vanchuyen/components/toast.js?v={{ vc_context.assetVersion }}",
+    "/assets/vanchuyen/vanchuyen/components/modal.js": "/assets/vanchuyen/vanchuyen/components/modal.js?v={{ vc_context.assetVersion }}",
+    "/assets/vanchuyen/vanchuyen/components/confirm.js": "/assets/vanchuyen/vanchuyen/components/confirm.js?v={{ vc_context.assetVersion }}",
+    "/assets/vanchuyen/vanchuyen/components/data-table.js": "/assets/vanchuyen/vanchuyen/components/data-table.js?v={{ vc_context.assetVersion }}"
+  }
+}
+</script>
+
+<script>
+	window.VC_CONTEXT = {{ vc_context | tojson }};
+</script>
+
+<style>
+	/* Ẩn chrome web ERPNext để SPA chiếm toàn màn hình (fixed header riêng). */
+	.navbar, .web-footer, footer.web-footer, .page-head, .breadcrumb-container { display: none !important; }
+	body { margin: 0 !important; padding: 0 !important; background: transparent !important; }
+	.main-section, main.container, .page_content { padding: 0 !important; margin: 0 !important; max-width: none !important; }
+	#page-vc .page-content-wrapper { padding: 0 !important; }
+</style>
+{% endblock %}
+
+{% block page_content %}
+{% if not has_role %}
+<div class="vc-app" id="vc-app">
+	<div class="vc-empty" style="min-height: 60vh; justify-content: center;">
+		<div class="vc-empty-icon">🔒</div>
+		<div class="vc-empty-title">Tài khoản của bạn chưa được cấp quyền vận chuyển</div>
+		<p class="vc-text-muted">Liên hệ Điều Phối để được gán vai trò Lái Xe hoặc Điều Phối Vận Chuyển.</p>
+	</div>
+</div>
+{% else %}
+<div class="vc-app" id="vc-app">
+	<header class="vc-header"><div class="vc-header-inner" id="vc-header-inner"></div></header>
+	<main class="vc-main" id="vc-view"></main>
+	<nav class="vc-bottom-nav" id="vc-bottom-nav" style="display: none"></nav>
+
+	<div class="vc-toast-mount" id="vc-toast-mount"></div>
+	<div class="vc-modal-mount" id="vc-modal-mount"></div>
+	<div class="vc-loading-mount" id="vc-loading-mount" hidden>
+		<div class="vc-loading-spinner"></div>
+		<div class="vc-loading-text">Đang xử lý…</div>
+	</div>
+</div>
+<script type="module" src="/assets/vanchuyen/vanchuyen/shell.js?v={{ vc_context.assetVersion }}"></script>
+{% endif %}
+{% endblock %}
