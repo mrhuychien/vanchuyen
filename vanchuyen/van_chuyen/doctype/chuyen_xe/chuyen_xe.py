@@ -132,6 +132,12 @@ def reconcile(si_list):
 
 
 def _reconcile_one(si):
+	# Acceptance (f): SI đã 'Đã nộp chứng từ' → KHÔNG BAO GIỜ bị reconcile ghi đè (mọi field,
+	# không chỉ trạng thái VC). Trường này do app khác sở hữu; 'đã nộp' = đã tất toán.
+	cur = frappe.db.get_value("Sales Invoice", si, "custom_trạng_thái_vận_chuyển") or ""
+	if cur == "Đã nộp chứng từ":
+		return
+
 	tong = _si_tong(si)
 	trips = _trips_holding(si)
 	xep = da_xep(si)
@@ -155,8 +161,7 @@ def _reconcile_one(si):
 	else:
 		values["custom_trang_thai_xep"] = "Chưa xếp"
 
-	# Trạng thái vận chuyển: chỉ ghi 2 giá trị, chỉ tiến, không đụng 'Đã nộp chứng từ'.
-	cur = frappe.db.get_value("Sales Invoice", si, "custom_trạng_thái_vận_chuyển") or ""
+	# Trạng thái vận chuyển: chỉ ghi 2 giá trị, chỉ tiến (cur đã != 'Đã nộp chứng từ' ở guard trên).
 	new_vc = None
 	if tong > 0 and giao >= tong - EPS:
 		new_vc = "Đã giao hàng, chụp chứng từ"
@@ -185,8 +190,26 @@ class ChuyenXe(Document):
 		self._enrich_rows()
 
 	def validate(self):
-		self._validate_rows()
-		self._compute_totals()
+		# Check cấu trúc từng dòng: LUÔN chạy (kể cả sau submit).
+		self._validate_structural()
+		# Check pool-integrity + cross-trip + throw quá tải: khi dựng nháp, khi SUBMIT
+		# (0→1: giữa lúc dựng và submit có thể chuyến khác đã chiếm chỗ), hoặc khi adjust
+		# thêm/bớt đơn. KHÔNG chạy khi Lái Xe chỉ cập nhật trạng thái điểm giao — nếu không,
+		# admin đổi hình thức VC giữa chừng sẽ CHẶN lái xe ghi giao hàng.
+		heavy = self._needs_heavy_validation()
+		if heavy:
+			self._validate_pool_and_crosstrip()
+		self._compute_totals(warn_overload=heavy)
+
+	def _needs_heavy_validation(self):
+		if self.docstatus == 0:
+			return True  # đang dựng nháp
+		before = self.get_doc_before_save()
+		if before is None or before.docstatus == 0:
+			return True  # đang submit (0→1) → phải validate pool + cross-trip
+		# đã submit từ trước → chỉ heavy khi thành phần (sales_invoice, so_kien) đổi (adjust)
+		sig = lambda doc: sorted((r.sales_invoice, round(flt(r.so_kien), 3)) for r in doc.don_hang)
+		return sig(self) != sig(before)
 
 	def on_submit(self):
 		self.db_set("trang_thai", "Đang giao")
@@ -249,20 +272,27 @@ class ChuyenXe(Document):
 			if not row.the_tich and row.so_kien and tong > 0:
 				row.the_tich = flt(si.get("custom_thể_tích_lô")) / 1_000_000.0 * flt(row.so_kien) / tong
 
-	def _validate_rows(self):
+	def _validate_structural(self):
+		"""Ràng buộc cấu trúc mỗi dòng — an toàn để chạy mọi lúc (kể cả sau submit)."""
 		seen = set()
 		for row in self.don_hang:
-			si = row.sales_invoice
 			if flt(row.so_kien) <= 0:
 				frappe.throw(_("Dòng {0}: số kiện phải lớn hơn 0.").format(row.idx))
 			if flt(row.the_tich) < 0:
 				frappe.throw(_("Dòng {0}: thể tích không được âm.").format(row.idx))
-			if si in seen:
+			if row.sales_invoice in seen:
 				frappe.throw(
-					_("Đơn {0} xuất hiện 2 lần trong chuyến — sửa số kiện ở dòng đã có, đừng thêm dòng mới.").format(si)
+					_("Đơn {0} xuất hiện 2 lần trong chuyến — sửa số kiện ở dòng đã có, đừng thêm dòng mới.").format(
+						row.sales_invoice
+					)
 				)
-			seen.add(si)
+			seen.add(row.sales_invoice)
 
+	def _validate_pool_and_crosstrip(self):
+		"""Pool-integrity (SI submit/return/hình thức) + ràng buộc tách đơn cross-trip.
+		Chỉ chạy khi dựng/điều chỉnh chuyến (thành phần dòng đổi) — xem validate()."""
+		for row in self.don_hang:
+			si = row.sales_invoice
 			info = frappe.db.get_value(
 				"Sales Invoice",
 				si,
@@ -286,7 +316,7 @@ class ChuyenXe(Document):
 					)
 				)
 
-	def _compute_totals(self):
+	def _compute_totals(self, warn_overload=True):
 		if not self.the_tich_xe and self.xe:
 			self.the_tich_xe = flt(frappe.db.get_value("Vehicle", self.xe, "custom_the_tich_kha_dung"))
 		self.tong_don = len(self.don_hang)
@@ -297,13 +327,14 @@ class ChuyenXe(Document):
 		if the_tich_xe > 0:
 			ratio = self.tong_the_tich / the_tich_xe
 			self.ti_le_tai = ratio * 100
-			if ratio > OVERLOAD_HARD:
+			# Chỉ chặn/cảnh báo tải khi đang dựng/điều chỉnh chuyến (không khi lái xe cập nhật điểm).
+			if warn_overload and ratio > OVERLOAD_HARD:
 				frappe.throw(
 					_("Quá tải {0}% (ngưỡng chặn {1}%): {2} m³ vượt thể tích khả dụng {3} m³. Giảm bớt đơn.").format(
 						_fmt(ratio * 100), int(OVERLOAD_HARD * 100), _fmt(self.tong_the_tich), _fmt(the_tich_xe)
 					)
 				)
-			if ratio > 1.0:
+			if warn_overload and ratio > 1.0:
 				frappe.msgprint(
 					_("Cảnh báo tải trọng: {0}% > 100% thể tích khả dụng ({1} m³).").format(
 						_fmt(ratio * 100), _fmt(the_tich_xe)
