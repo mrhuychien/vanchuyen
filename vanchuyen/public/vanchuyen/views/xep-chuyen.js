@@ -16,6 +16,7 @@ const S = {
 	trips: [],
 	builder: { name: null, ngay_giao: "", lai_xe: "", xe: "", rows: [] },
 	filter: { tim: "", tinh: "", tu: "", den: "" },
+	saving: false,
 };
 let ROOT = null;
 
@@ -143,26 +144,22 @@ function drawPool() {
 			: `<div class="vc-text-center vc-mt-3 vc-text-muted vc-text-sm">Đã hiển thị ${S.pool.length} đơn</div>`;
 	list.innerHTML = `<div class="vc-list">${cards}</div>${more}`;
 
-	list.querySelectorAll("[data-add]").forEach((el) => {
-		el.addEventListener("click", (e) => {
-			if (e.target.closest("[data-partial]")) return;
-			addFull(el.dataset.add);
-		});
-	});
-	list.querySelectorAll("[data-partial]").forEach((btn) => {
-		btn.addEventListener("click", (e) => {
-			e.stopPropagation();
-			openPartialDialog(btn.dataset.partial);
-		});
-	});
+	// Nút thêm/một-phần là control RIÊNG (không tap cả card) → tránh fat-finger thêm nhầm cả đơn.
+	list.querySelectorAll("[data-add]").forEach((btn) => btn.addEventListener("click", () => addFull(btn.dataset.add)));
+	list.querySelectorAll("[data-partial]").forEach((btn) => btn.addEventListener("click", () => openPartialDialog(btn.dataset.partial)));
 	const moreBtn = document.getElementById("vc-pool-more");
 	if (moreBtn) moreBtn.addEventListener("click", () => reloadPool(S.poolPage + 1));
 }
 
 function poolCard(o) {
 	const picked = poolPicked(o.name);
+	const canAdd = (Number(o.con_lai) || 0) > 0 && !picked;
+	const actions = picked
+		? `<span class="vc-order-added"><i class="fas fa-check"></i> Đã thêm vào chuyến</span>`
+		: `<button type="button" class="vc-order-add-btn" data-add="${escapeHtml(o.name)}" ${canAdd ? "" : "disabled"}><i class="fas fa-plus"></i> Thêm hết (${formatQty(o.con_lai)} kiện)</button>` +
+		  `<button type="button" class="vc-order-partial-btn" data-partial="${escapeHtml(o.name)}">Một phần</button>`;
 	return `
-	<div class="vc-order-card vc-selectable ${picked ? "vc-picked" : ""}" data-add="${escapeHtml(o.name)}">
+	<div class="vc-order-card ${picked ? "vc-picked" : ""}">
 		<div class="vc-order-head">
 			<div>
 				<div class="vc-order-cust">${escapeHtml(o.khach_hang || "")}</div>
@@ -174,9 +171,9 @@ function poolCard(o) {
 			<span class="vc-chip vc-chip-accent">còn ${formatQty(o.con_lai)}/${formatQty(o.tong_kien)} kiện</span>
 			<span class="vc-chip">${formatM3(o.the_tich_con_lai)} m³</span>
 			${o.hop_le ? `<span class="vc-chip">${formatQty(o.hop_le)} hộp lẻ</span>` : ""}
-			<button class="vc-btn-ghost" data-partial="${escapeHtml(o.name)}" style="margin-left:auto;padding:4px 10px;font-size:.78rem">Xếp một phần</button>
 		</div>
 		${o.ghi_chu_npp ? `<div class="vc-order-note">📝 ${escapeHtml(o.ghi_chu_npp)}</div>` : ""}
+		<div class="vc-order-actions">${actions}</div>
 	</div>`;
 }
 
@@ -196,6 +193,7 @@ function addFull(si) {
 		return;
 	}
 	S.builder.rows.push(mkRow(o, o.con_lai, o.the_tich_con_lai));
+	showToast("Đã thêm " + (o.khach_hang || si), "success");
 	drawBuilder();
 	drawPool();
 }
@@ -246,6 +244,7 @@ function openPartialDialog(si) {
 		const row = mkRow(o, kien, 0);
 		row.the_tich = proRata(row);
 		S.builder.rows.push(row);
+		showToast("Đã thêm một phần: " + (o.khach_hang || si), "success");
 		closeModal();
 		drawBuilder();
 		drawPool();
@@ -277,7 +276,7 @@ function drawBuilder() {
 		? S.vehicles
 				.map(
 					(v) =>
-						`<button type="button" class="vc-chip-btn ${v.name === b.xe ? "active" : ""}" data-xe="${escapeHtml(v.name)}">` +
+						`<button type="button" class="vc-chip-btn ${v.name === b.xe ? "active" : ""}" data-xe="${escapeHtml(v.name)}" aria-pressed="${v.name === b.xe ? "true" : "false"}">` +
 						`<span>${escapeHtml(v.name)}</span>` +
 						`${v.custom_the_tich_kha_dung ? `<small>${formatM3(v.custom_the_tich_kha_dung)} m³</small>` : ""}</button>`
 				)
@@ -287,7 +286,7 @@ function drawBuilder() {
 		? S.drivers
 				.map(
 					(d) =>
-						`<button type="button" class="vc-chip-btn ${d.name === b.lai_xe ? "active" : ""}" data-laixe="${escapeHtml(d.name)}">` +
+						`<button type="button" class="vc-chip-btn ${d.name === b.lai_xe ? "active" : ""}" data-laixe="${escapeHtml(d.name)}" aria-pressed="${d.name === b.lai_xe ? "true" : "false"}">` +
 						`<span>${escapeHtml(d.full_name || d.name)}</span></button>`
 				)
 				.join("")
@@ -296,8 +295,8 @@ function drawBuilder() {
 	wrap.innerHTML = `
 	<div class="vc-card">
 		${b.name ? `<div class="vc-badge vc-badge-muted vc-mb-2">Đang sửa nháp: ${escapeHtml(b.name)}</div>` : ""}
-		<div class="vc-field"><label>Bước 1 · Chọn xe</label><div class="vc-chip-group" id="vc-b-xe-group">${xeChips}</div></div>
-		<div class="vc-field"><label>Bước 2 · Chọn lái xe</label><div class="vc-chip-group" id="vc-b-laixe-group">${laixeChips}</div></div>
+		<div class="vc-field"><label>Bước 1 · Chọn xe</label><div class="vc-chip-group" id="vc-b-xe-group" role="group" aria-label="Chọn xe">${xeChips}</div></div>
+		<div class="vc-field"><label>Bước 2 · Chọn lái xe</label><div class="vc-chip-group" id="vc-b-laixe-group" role="group" aria-label="Chọn lái xe">${laixeChips}</div></div>
 		<div class="vc-field"><label>Bước 3 · Ngày giao</label><input class="vc-input" type="date" id="vc-b-ngay" value="${escapeHtml(b.ngay_giao)}" /></div>
 		${loadBar()}
 		<div class="vc-builder-rows-title">Đơn đã chọn (${b.rows.length})</div>
@@ -403,6 +402,7 @@ function builderPayload() {
 
 async function saveTrip(thenSubmit) {
 	const b = S.builder;
+	if (S.saving) return; // chặn double-tap (CTA + nút card) tạo chuyến trùng
 	if (!b.lai_xe || !b.xe) {
 		showToast("Chọn lái xe và xe trước", "error");
 		return;
@@ -411,6 +411,8 @@ async function saveTrip(thenSubmit) {
 		showToast("Chưa có đơn nào trong chuyến", "error");
 		return;
 	}
+	S.saving = true;
+	document.querySelectorAll("#vc-b-submit, #vc-b-save, #vc-cta-submit").forEach((el) => (el.disabled = true));
 	try {
 		const doc = await call("vanchuyen.api.dieu_phoi.save_trip", { payload: JSON.stringify(builderPayload()) });
 		b.name = doc.name;
@@ -425,6 +427,9 @@ async function saveTrip(thenSubmit) {
 	} catch (e) {
 		// Hiện nguyên văn message throw của server (validate là sự thật).
 		showToast(errText(e), "error");
+	} finally {
+		S.saving = false;
+		document.querySelectorAll("#vc-b-submit, #vc-b-save, #vc-cta-submit").forEach((el) => (el.disabled = false));
 	}
 }
 
@@ -561,9 +566,9 @@ async function editDraft(name) {
 			rows: (doc.stops || []).map((s) => ({
 				sales_invoice: s.sales_invoice,
 				khach_hang: s.khach_hang,
-				tong_kien: 0,
-				the_tich_lo: 0,
-				con_lai: s.so_kien,
+				tong_kien: Number(s.tong_kien) || 0,
+				the_tich_lo: Number(s.the_tich_lo) || 0,
+				con_lai: Number(s.con_lai) || Number(s.so_kien) || 0,
 				so_kien: s.so_kien,
 				the_tich: s.the_tich,
 			})),

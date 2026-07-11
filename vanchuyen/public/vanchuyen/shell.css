@@ -1093,6 +1093,59 @@
 	color: var(--vc-text-3);
 	margin: 0.6rem 0 0.4rem;
 }
+/* Nút thêm đơn trong pool card — hai ý định (thêm hết / một phần) tách rõ, ≥44px */
+.vc-order-actions {
+	display: flex;
+	gap: 0.5rem;
+	margin-top: 0.6rem;
+}
+.vc-order-add-btn {
+	flex: 1;
+	min-height: 44px;
+	border: none;
+	border-radius: 12px;
+	background: var(--vc-accent-grad);
+	color: #fff;
+	font-weight: 700;
+	font-size: 0.85rem;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.4rem;
+	font-family: inherit;
+}
+.vc-order-add-btn:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+.vc-order-partial-btn {
+	min-height: 44px;
+	padding: 0 1rem;
+	border: 1px solid var(--vc-border);
+	border-radius: 12px;
+	background: var(--vc-surface);
+	color: var(--vc-text-2);
+	font-weight: 700;
+	font-size: 0.85rem;
+	cursor: pointer;
+	font-family: inherit;
+}
+.vc-order-add-btn:active,
+.vc-order-partial-btn:active {
+	transform: scale(0.98);
+}
+.vc-order-added {
+	flex: 1;
+	min-height: 44px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.4rem;
+	color: var(--vc-success);
+	font-weight: 700;
+	font-size: 0.85rem;
+}
 /* Thanh tổng tải + Xuất chuyến dính đáy (chỉ mobile; desktop dùng setup sticky) */
 .vc-xep-cta {
 	position: fixed;

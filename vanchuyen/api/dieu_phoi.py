@@ -170,6 +170,32 @@ def get_trips(trang_thai=None, tu_ngay=None, den_ngay=None):
 
 
 def _trip_dict(doc):
+	stops = []
+	for r in doc.don_hang:
+		si = r.sales_invoice
+		# Cơ sở pro-rata cho client khi SỬA NHÁP: có tong_kien + the_tich_lo (m³) để đổi
+		# số kiện không bị zero thể tích; con_lai = trần đơn có thể xếp cho dòng này.
+		tong = flt(frappe.db.get_value("Sales Invoice", si, "custom_tổng_kiện")) if si else 0.0
+		the_tich_lo = (flt(frappe.db.get_value("Sales Invoice", si, "custom_thể_tích_lô")) / 1_000_000.0) if si else 0.0
+		con_lai_row = (tong - da_xep(si, exclude_trip=doc.name)) if si else 0.0
+		stops.append(
+			{
+				"row_name": r.name,
+				"sales_invoice": si,
+				"khach_hang": r.khach_hang,
+				"dia_chi": r.dia_chi,
+				"so_po": r.so_po,
+				"so_kien": flt(r.so_kien),
+				"the_tich": flt(r.the_tich),
+				"hop_le": flt(r.hop_le),
+				"trang_thai_giao": r.trang_thai_giao,
+				"so_chung_tu": cint(r.so_chung_tu),
+				"ghi_chu": r.ghi_chu,
+				"tong_kien": tong,
+				"the_tich_lo": the_tich_lo,
+				"con_lai": con_lai_row,
+			}
+		)
 	return {
 		"name": doc.name,
 		"ngay_giao": str(doc.ngay_giao) if doc.ngay_giao else None,
@@ -185,22 +211,7 @@ def _trip_dict(doc):
 		"tong_the_tich": flt(doc.tong_the_tich),
 		"ti_le_tai": flt(doc.ti_le_tai),
 		"ghi_chu": doc.ghi_chu,
-		"stops": [
-			{
-				"row_name": r.name,
-				"sales_invoice": r.sales_invoice,
-				"khach_hang": r.khach_hang,
-				"dia_chi": r.dia_chi,
-				"so_po": r.so_po,
-				"so_kien": flt(r.so_kien),
-				"the_tich": flt(r.the_tich),
-				"hop_le": flt(r.hop_le),
-				"trang_thai_giao": r.trang_thai_giao,
-				"so_chung_tu": cint(r.so_chung_tu),
-				"ghi_chu": r.ghi_chu,
-			}
-			for r in doc.don_hang
-		],
+		"stops": stops,
 	}
 
 
