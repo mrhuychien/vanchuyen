@@ -42,8 +42,9 @@ function statusClass(s) {
 function stopCard(s) {
 	const mapUrl = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(s.dia_chi || "");
 	return `
-	<div class="vc-stop-card ${statusClass(s.trang_thai_giao)}" data-row="${escapeHtml(s.row_name)}">
+	<div class="vc-stop-card ${statusClass(s.trang_thai_giao)}${s.trang_thai_giao === "Đã giao" && (s.so_chung_tu || 0) > 0 ? " has-proof" : ""}" data-row="${escapeHtml(s.row_name)}">
 		<div class="vc-order-cust">${escapeHtml(s.khach_hang || "")}</div>
+		<div class="vc-stop-state" data-state>${stateLabel(s)}</div>
 		<a class="vc-stop-addr" href="${mapUrl}" target="_blank" rel="noopener">
 			<i class="fas fa-map-marker-alt"></i> ${escapeHtml(s.dia_chi || "(chưa có địa chỉ)")}</a>
 		<div class="vc-order-meta">
@@ -78,13 +79,23 @@ function refreshProgress() {
 	if (p) p.textContent = `${TRIP.stops_giao}/${TRIP.stops_total} điểm`;
 }
 
-function applyStatusUI(cardEl, status) {
-	cardEl.classList.remove("done", "hen", "hoan");
-	const c = statusClass(status);
+function stateLabel(s) {
+	const proof = (s.so_chung_tu || 0) > 0;
+	if (s.trang_thai_giao === "Đã giao") return proof ? "✅ Đã giao hàng, chụp chứng từ" : "✅ Đã giao";
+	if (s.trang_thai_giao === "Khách hẹn") return "🕐 Khách hẹn";
+	if (s.trang_thai_giao === "Hoàn") return "↩️ Hoàn";
+	return "⏳ Chờ giao";
+}
+
+// Đồng bộ toàn bộ hiển thị thẻ theo trạng thái + có chứng từ (đọc từ stop, không truyền lẻ).
+function applyCardVisual(cardEl, stop) {
+	cardEl.classList.remove("done", "hen", "hoan", "has-proof");
+	const c = statusClass(stop.trang_thai_giao);
 	if (c) cardEl.classList.add(c);
-	cardEl.querySelectorAll(".vc-status-btn").forEach((b) => {
-		b.classList.toggle("active", b.dataset.st === status);
-	});
+	if (stop.trang_thai_giao === "Đã giao" && (stop.so_chung_tu || 0) > 0) cardEl.classList.add("has-proof");
+	cardEl.querySelectorAll(".vc-status-btn").forEach((b) => b.classList.toggle("active", b.dataset.st === stop.trang_thai_giao));
+	const stateEl = cardEl.querySelector("[data-state]");
+	if (stateEl) stateEl.textContent = stateLabel(stop);
 }
 
 function bindCard(cardEl) {
@@ -96,8 +107,8 @@ function bindCard(cardEl) {
 			const prev = stop.trang_thai_giao;
 			// Chạm lại trạng thái đang active → về 'Chờ giao'.
 			const target = prev === btn.dataset.st ? "Chờ giao" : btn.dataset.st;
-			applyStatusUI(cardEl, target);
 			stop.trang_thai_giao = target;
+			applyCardVisual(cardEl, stop);
 			refreshProgress();
 			try {
 				await call("vanchuyen.api.lai_xe.update_stop_status", {
@@ -108,7 +119,7 @@ function bindCard(cardEl) {
 				showToast("Đã cập nhật", "success");
 			} catch (e) {
 				stop.trang_thai_giao = prev;
-				applyStatusUI(cardEl, prev);
+				applyCardVisual(cardEl, stop);
 				refreshProgress();
 				showToast(errText(e) + " — thử lại", "error");
 			}
@@ -148,7 +159,19 @@ async function handlePhoto(input, rowName, badge, stop) {
 		);
 		badge.textContent = res.so_chung_tu;
 		stop.so_chung_tu = res.so_chung_tu;
-		showToast("Đã tải ảnh chứng từ", "success");
+		// Up chứng từ xong → TỰ đánh dấu 'Đã giao' → reconcile ghi SI 'Đã giao hàng, chụp chứng từ'.
+		if (stop.trang_thai_giao !== "Đã giao") {
+			await call("vanchuyen.api.lai_xe.update_stop_status", {
+				trip: TRIP.name,
+				row_name: rowName,
+				trang_thai: "Đã giao",
+			});
+			stop.trang_thai_giao = "Đã giao";
+			refreshProgress();
+		}
+		const cardEl = input.closest(".vc-stop-card");
+		if (cardEl) applyCardVisual(cardEl, stop);
+		showToast("Đã giao hàng + lưu chứng từ", "success");
 	} catch (e) {
 		showToast(errText(e), "error");
 	}

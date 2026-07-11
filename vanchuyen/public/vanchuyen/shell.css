@@ -503,12 +503,34 @@
 }
 .vc-stop-card.done {
 	border-left: 4px solid var(--vc-success);
+	background: #f0fdf4;
+}
+.vc-stop-card.done.has-proof {
+	background: #dcfce7;
+	border-left-width: 6px;
 }
 .vc-stop-card.hen {
 	border-left: 4px solid var(--vc-warning);
+	background: #fffbeb;
 }
 .vc-stop-card.hoan {
 	border-left: 4px solid var(--vc-danger);
+	background: #fef2f2;
+}
+.vc-stop-state {
+	font-size: 0.75rem;
+	font-weight: 700;
+	margin: 2px 0 4px;
+	color: var(--vc-text-3);
+}
+.vc-stop-card.done .vc-stop-state {
+	color: #047857;
+}
+.vc-stop-card.hen .vc-stop-state {
+	color: #b45309;
+}
+.vc-stop-card.hoan .vc-stop-state {
+	color: #b91c1c;
 }
 .vc-stop-addr {
 	color: var(--vc-accent-1);
