@@ -3,7 +3,7 @@
   "doctype": "Role",
   "name": "Điều Phối Vận Chuyển",
   "role_name": "Điều Phối Vận Chuyển",
-  "desk_access": 1,
+  "desk_access": 0,
   "disabled": 0,
   "is_custom": 1,
   "restrict_to_domain": null,

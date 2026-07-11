@@ -21,7 +21,9 @@ def after_install():
 def _ensure_roles():
 	# after_install có thể chạy TRƯỚC sync_fixtures → tự tạo Role thay vì giả định
 	# fixtures đã vào DB. Fixture import sau sẽ ghi đè (delete_doc for_reload).
-	for role, desk in ((DIEU_PHOI, 1), (LAI_XE, 0)):
+	# desk_access=0 cho CẢ HAI role → tổ trưởng & lái xe KHÔNG vào được /app (desk),
+	# chỉ dùng portal /vc. (Admin/System Manager vẫn có desk qua role riêng.)
+	for role, desk in ((DIEU_PHOI, 0), (LAI_XE, 0)):
 		try:
 			if not frappe.db.exists("Role", role):
 				frappe.get_doc(

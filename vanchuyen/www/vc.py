@@ -9,6 +9,15 @@ SHELL_BUILD = "2026-07-04-p1"
 def get_context(context):
 	context.no_cache = 1
 
+	# Đăng nhập QR: /vc?k=<token> → tìm Driver theo token → login_as (không cần mật khẩu).
+	# Token 40 ký tự ngẫu nhiên; tài khoản khoá (enabled=0) thì bỏ qua.
+	if frappe.session.user == "Guest":
+		token = frappe.form_dict.get("k")
+		if token:
+			drv = frappe.db.get_value("Driver", {"custom_login_token": token}, ["custom_user"], as_dict=True)
+			if drv and drv.custom_user and frappe.db.get_value("User", drv.custom_user, "enabled"):
+				frappe.local.login_manager.login_as(drv.custom_user)
+
 	if frappe.session.user == "Guest":
 		frappe.local.flags.redirect_location = "/login?redirect-to=/vc"
 		raise frappe.Redirect

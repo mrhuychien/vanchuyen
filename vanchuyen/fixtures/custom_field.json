@@ -104,5 +104,18 @@
   "read_only": 1,
   "insert_after": "custom_chuyến_xe",
   "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Driver-custom_login_token",
+  "dt": "Driver",
+  "fieldname": "custom_login_token",
+  "label": "Token đăng nhập QR",
+  "fieldtype": "Data",
+  "read_only": 1,
+  "no_copy": 1,
+  "hidden": 1,
+  "insert_after": "custom_user",
+  "module": "Van Chuyen"
  }
 ]

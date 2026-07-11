@@ -256,7 +256,8 @@ def save_trip(payload):
 	doc.xe = payload.get("xe")
 	doc.ghi_chu = payload.get("ghi_chu")
 	_apply_rows(doc, payload.get("don_hang"))
-	doc.save()
+	# Tổ trưởng là Website User → ignore_permissions SAU guard require_dieu_phoi (đã kiểm role).
+	doc.save(ignore_permissions=True)
 	return _trip_dict(doc)
 
 
@@ -265,6 +266,7 @@ def submit_trip(name):
 	"""Submit chuyến nháp → trang_thai 'Đang giao' + reconcile về các SI."""
 	require_dieu_phoi()
 	doc = frappe.get_doc("Chuyen Xe", name)
+	doc.flags.ignore_permissions = True
 	doc.submit()
 	return _trip_dict(doc)
 
@@ -274,6 +276,7 @@ def cancel_trip(name):
 	"""Hủy chuyến → nhả allocation về pool."""
 	require_dieu_phoi()
 	doc = frappe.get_doc("Chuyen Xe", name)
+	doc.flags.ignore_permissions = True
 	doc.cancel()
 	return _trip_dict(doc)
 
@@ -312,5 +315,5 @@ def adjust_trip(name, add_rows=None, remove_row_names=None):
 				"the_tich": flt(r.get("the_tich")),
 			},
 		)
-	doc.save()
+	doc.save(ignore_permissions=True)
 	return _trip_dict(doc)

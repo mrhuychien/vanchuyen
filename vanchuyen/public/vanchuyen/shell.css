@@ -1225,6 +1225,42 @@
 	}
 }
 
+/* ── QR đăng nhập lái xe (view tài khoản) ──────────────────────────────────── */
+.vc-qr-wrap {
+	display: flex;
+	justify-content: center;
+	padding: 0.75rem 0 0.25rem;
+}
+#vc-qrbox {
+	padding: 12px;
+	background: #fff;
+	border-radius: 12px;
+	box-shadow: var(--vc-shadow-sm);
+	border: 1px solid var(--vc-border);
+	min-width: 200px;
+	min-height: 200px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+#vc-qrbox img,
+#vc-qrbox canvas {
+	display: block;
+}
+.vc-qr-name {
+	text-align: center;
+	font-weight: 800;
+	font-size: 1.05rem;
+	margin-top: 0.5rem;
+}
+.vc-qr-url {
+	text-align: center;
+	font-size: 0.72rem;
+	color: var(--vc-text-3);
+	word-break: break-all;
+	margin: 6px 0 10px;
+}
+
 /* ── Utility ───────────────────────────────────────────────────────────────── */
 .vc-flex {
 	display: flex;
