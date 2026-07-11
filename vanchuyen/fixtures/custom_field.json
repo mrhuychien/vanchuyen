@@ -37,5 +37,60 @@
   "description": "User đăng nhập /vc của lái xe",
   "insert_after": "cell_number",
   "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-custom_chuyến_xe",
+  "dt": "Sales Invoice",
+  "fieldname": "custom_chuyến_xe",
+  "label": "Chuyến xe",
+  "fieldtype": "Data",
+  "in_standard_filter": 1,
+  "insert_after": "custom_thông_tin_vận_chuyển",
+  "description": "Mã chuyến xe (group nhiều đơn cùng 1 chuyến)",
+  "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-custom_lái_xe",
+  "dt": "Sales Invoice",
+  "fieldname": "custom_lái_xe",
+  "label": "Lái xe",
+  "fieldtype": "Link",
+  "options": "Driver",
+  "allow_on_submit": 1,
+  "insert_after": "custom_chuyến_xe",
+  "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-custom_tên_lái_xe",
+  "dt": "Sales Invoice",
+  "fieldname": "custom_tên_lái_xe",
+  "label": "Tên lái xe",
+  "fieldtype": "Data",
+  "insert_after": "custom_lái_xe",
+  "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-custom_điện_thoại_lái_xe",
+  "dt": "Sales Invoice",
+  "fieldname": "custom_điện_thoại_lái_xe",
+  "label": "Điện thoại lái xe",
+  "fieldtype": "Data",
+  "options": "Phone",
+  "insert_after": "custom_tên_lái_xe",
+  "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-custom_xe",
+  "dt": "Sales Invoice",
+  "fieldname": "custom_xe",
+  "label": "Xe (biển số)",
+  "fieldtype": "Data",
+  "insert_after": "custom_điện_thoại_lái_xe",
+  "module": "Van Chuyen"
  }
 ]
