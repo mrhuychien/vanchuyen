@@ -61,42 +61,40 @@ const CSS_TEXT = `
 .rvhg-date-input { padding:9px 14px; border:2px solid var(--rvhg-gray-200); border-radius:12px; font-size:13px; font-weight:600;
   background:white; cursor:pointer; transition:all .25s ease; color:var(--rvhg-gray-700); font-family:inherit; }
 .rvhg-date-input:focus { outline:none; border-color:var(--rvhg-primary); box-shadow:0 0 0 4px rgba(124,58,237,0.1); }
-.rvhg-po-search-input { padding:12px 16px; border:2px solid var(--rvhg-gray-200); border-radius:14px; font-size:14px; font-weight:600;
-  background:white; transition:all .25s ease; color:var(--rvhg-gray-700); font-family:inherit; min-width:180px; }
+.rvhg-po-search-input { padding:9px 14px; border:2px solid var(--rvhg-gray-200); border-radius:12px; font-size:13px; font-weight:600;
+  background:white; transition:all .25s ease; color:var(--rvhg-gray-700); font-family:inherit; min-width:160px; flex:1; }
 .rvhg-po-search-input:focus { outline:none; border-color:var(--rvhg-primary); box-shadow:0 0 0 4px rgba(124,58,237,0.1); }
 .rvhg-po-search-input::placeholder { color:var(--rvhg-gray-400); font-weight:500; }
-.rvhg-filter-toggle-btn { padding:12px 18px; background:linear-gradient(135deg,var(--rvhg-gray-100) 0%,var(--rvhg-gray-50) 100%);
-  border:2px solid var(--rvhg-gray-200); border-radius:14px; cursor:pointer; font-weight:600; color:var(--rvhg-gray-600);
-  transition:all .25s ease; display:flex; align-items:center; gap:10px; font-size:14px; font-family:inherit; }
+.rvhg-filter-toggle-btn { padding:9px 14px; background:linear-gradient(135deg,var(--rvhg-gray-100) 0%,var(--rvhg-gray-50) 100%);
+  border:2px solid var(--rvhg-gray-200); border-radius:12px; cursor:pointer; font-weight:600; color:var(--rvhg-gray-600);
+  transition:all .25s ease; display:flex; align-items:center; gap:8px; font-size:13px; font-family:inherit; }
 .rvhg-filter-toggle-btn:hover { background:white; border-color:var(--rvhg-primary-light); color:var(--rvhg-primary); }
-.rvhg-filter-toggle-btn .rvhg-arrow { transition:transform .3s ease; font-size:12px; }
+.rvhg-filter-toggle-btn .rvhg-arrow { transition:transform .3s ease; font-size:11px; }
 .rvhg-filter-toggle-btn.rvhg-expanded .rvhg-arrow { transform:rotate(180deg); }
-.rvhg-filter-status { padding:10px 16px; background:linear-gradient(135deg,#dbeafe 0%,#e0e7ff 100%); border-radius:12px; font-size:.9em;
-  color:var(--rvhg-primary-dark); font-weight:700; margin-left:auto; border:1px solid rgba(124,58,237,0.2); }
-.rvhg-advanced-filters { margin-top:16px; display:none; background:white; padding:20px; border-radius:16px; border:1px solid var(--rvhg-gray-200); animation:rvhgSlideDown .3s ease; }
+.rvhg-filter-status { padding:7px 14px; background:linear-gradient(135deg,#dbeafe 0%,#e0e7ff 100%); border-radius:10px; font-size:.82em;
+  color:var(--rvhg-primary-dark); font-weight:700; margin-left:auto; border:1px solid rgba(124,58,237,0.2); white-space:nowrap; }
+.rvhg-advanced-filters { margin-top:12px; display:none; background:white; padding:14px; border-radius:14px; border:1px solid var(--rvhg-gray-200); animation:rvhgSlideDown .3s ease; }
 @keyframes rvhgSlideDown { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:translateY(0)} }
 .rvhg-advanced-filters.rvhg-show { display:block; }
-.rvhg-filters-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; }
-.rvhg-filter-group { display:flex; flex-direction:column; gap:8px; }
-.rvhg-filter-group label { font-size:.85em; font-weight:700; color:var(--rvhg-gray-600); text-transform:uppercase; letter-spacing:.5px; }
-.rvhg-filter-group input, .rvhg-filter-group select { padding:12px 14px; border:2px solid var(--rvhg-gray-200); border-radius:12px;
-  font-size:14px; transition:all .25s ease; font-family:inherit; background:white; color:var(--rvhg-gray-700); }
+.rvhg-filters-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; }
+.rvhg-filter-group { display:flex; flex-direction:column; gap:5px; }
+.rvhg-filter-group label { font-size:.75em; font-weight:700; color:var(--rvhg-gray-600); text-transform:uppercase; letter-spacing:.5px; }
+.rvhg-filter-group input, .rvhg-filter-group select { padding:9px 12px; border:2px solid var(--rvhg-gray-200); border-radius:10px;
+  font-size:13px; transition:all .25s ease; font-family:inherit; background:white; color:var(--rvhg-gray-700); }
 .rvhg-filter-group input:focus, .rvhg-filter-group select:focus { outline:none; border-color:var(--rvhg-primary); box-shadow:0 0 0 4px rgba(124,58,237,0.1); }
 .rvhg-stats-dashboard { background:linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.9) 100%); }
-.rvhg-stats-title { font-size:1.5em; font-weight:800; color:var(--rvhg-gray-800); margin-bottom:24px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
-.rvhg-stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; }
-.rvhg-stat-card { background:white; padding:20px; border-radius:18px; border:2px solid var(--rvhg-gray-200); cursor:pointer;
-  transition:all .3s cubic-bezier(.4,0,.2,1); position:relative; overflow:hidden; }
-.rvhg-stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:4px; background:linear-gradient(90deg,var(--rvhg-primary),var(--rvhg-accent)); transform:scaleX(0); transition:transform .3s ease; }
-.rvhg-stat-card:hover { border-color:var(--rvhg-primary-light); box-shadow:0 12px 28px rgba(124,58,237,0.15); transform:translateY(-4px); }
-.rvhg-stat-card:hover::before { transform:scaleX(1); }
-.rvhg-stat-card.rvhg-active { border-color:var(--rvhg-primary); background:linear-gradient(135deg,#faf5ff 0%,#f3e8ff 100%); box-shadow:0 12px 28px rgba(124,58,237,0.25); }
-.rvhg-stat-card.rvhg-active::before { transform:scaleX(1); }
-.rvhg-stat-card-header { font-size:.9em; color:var(--rvhg-gray-500); margin-bottom:10px; font-weight:600; }
-.rvhg-stat-card-value { font-size:2.8em; font-weight:800; background:linear-gradient(135deg,var(--rvhg-gray-800) 0%,var(--rvhg-gray-600) 100%);
-  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
-.rvhg-stat-card-label { font-size:.95em; color:var(--rvhg-gray-600); margin-top:4px; font-weight:600; }
-.rvhg-card-title { font-size:1.6em; font-weight:800; color:var(--rvhg-gray-800); margin-bottom:24px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.rvhg-stats-title { font-size:1.05em; font-weight:800; color:var(--rvhg-gray-800); margin-bottom:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.rvhg-stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(148px,1fr)); gap:8px; }
+.rvhg-stat-card { background:white; padding:8px 12px; border-radius:11px; border:2px solid var(--rvhg-gray-200); cursor:pointer;
+  transition:all .2s cubic-bezier(.4,0,.2,1); position:relative; overflow:hidden; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.rvhg-stat-card::before { content:''; position:absolute; top:0; left:0; bottom:0; width:3px; height:auto; background:linear-gradient(180deg,var(--rvhg-primary),var(--rvhg-accent)); transform:scaleY(0); transition:transform .2s ease; }
+.rvhg-stat-card:hover { border-color:var(--rvhg-primary-light); box-shadow:0 6px 16px rgba(124,58,237,0.12); transform:translateY(-1px); }
+.rvhg-stat-card:hover::before { transform:scaleY(1); }
+.rvhg-stat-card.rvhg-active { border-color:var(--rvhg-primary); background:linear-gradient(135deg,#faf5ff 0%,#f3e8ff 100%); box-shadow:0 6px 16px rgba(124,58,237,0.2); }
+.rvhg-stat-card.rvhg-active::before { transform:scaleY(1); }
+.rvhg-stat-card-header { font-size:.78rem; color:var(--rvhg-gray-600); font-weight:600; line-height:1.2; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rvhg-stat-card-value { font-size:1.5rem; font-weight:800; color:var(--rvhg-gray-800); line-height:1; flex-shrink:0; }
+.rvhg-card-title { font-size:1.15em; font-weight:800; color:var(--rvhg-gray-800); margin-bottom:12px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .rvhg-status-legend { margin-left:auto; display:flex; gap:10px; font-size:.55em; font-weight:600; flex-wrap:wrap; }
 .rvhg-status-legend-item { padding:8px 14px; border-radius:10px; white-space:nowrap; cursor:pointer; transition:all .25s ease; border:2px solid transparent; }
 .rvhg-status-legend-item:hover { transform:translateY(-2px); box-shadow:0 6px 16px rgba(0,0,0,0.12); }
@@ -291,7 +289,7 @@ const MARKUP = `
           <div class="rvhg-filter-group"><label>Số PO</label><input type="text" id="rvhg-filter-po" placeholder="Số PO khách hàng..." /></div>
           <div class="rvhg-filter-group"><label>Nhóm khách hàng</label><select id="rvhg-filter-customer-group"><option value="">Tất cả</option></select></div>
         </div>
-        <div style="margin-top:16px;"><button class="rvhg-btn rvhg-btn-tertiary" id="rvhg-apply-advanced-btn" type="button">🔍 Áp dụng bộ lọc</button></div>
+        <div style="margin-top:10px;"><button class="rvhg-btn rvhg-btn-tertiary" id="rvhg-apply-advanced-btn" type="button">🔍 Áp dụng bộ lọc</button></div>
       </div>
     </div>
   </div>
@@ -324,8 +322,8 @@ const MARKUP = `
       <span id="rvhg-page-info">Trang 1</span>
       <button id="rvhg-btn-next" type="button">Sau ▶</button>
     </div>
-    <div class="rvhg-load-more-section" id="rvhg-load-more-section">
-      <button class="rvhg-btn-load-more" id="rvhg-btn-load-more" type="button">📥 Tải thêm 1000 đơn hàng</button>
+    <div class="rvhg-load-more-section" id="rvhg-load-more-section" style="display:none;">
+      <button class="rvhg-btn-load-more" id="rvhg-btn-load-more" type="button">📥 Tải thêm 500 đơn</button>
     </div>
   </div>
 </div>
@@ -397,7 +395,9 @@ let shippingTypes = [];
 let shippingStatuses = [];
 let currentPage = 1;
 const itemsPerPage = 20;
-const loadBatchSize = 1000;
+const loadBatchSize = 500; // = trần page_size của server (get_invoices_dieu_phoi)
+const autoLoadCap = 4000; // tự tải hết khoảng thời gian tới ngưỡng này; vượt → nút tải thêm thủ công
+let totalAvailable = 0; // tổng đơn khớp bộ lọc thời gian ở server (không phụ thuộc đã tải)
 let totalLoadedRecords = 0;
 let loadPageNum = 1;
 let isLoading = false;
@@ -499,13 +499,13 @@ function setTimeRange(range) {
 	updateTimeRangeInfo();
 	allInvoices = [];
 	totalLoadedRecords = 0;
+	totalAvailable = 0;
 	loadPageNum = 1;
 	hasMoreData = true;
 	currentPage = 1;
 	selectedInvoices = [];
-	document.getElementById("rvhg-load-more-section").style.display = "";
 	showLoading();
-	loadMoreInvoices().then(() => { renderStatistics(); applyFilters(); });
+	loadAllForRange();
 }
 
 function rebuildShippingTypesFromData() {
@@ -626,7 +626,8 @@ function renderStatistics() {
 		const card = document.createElement("div");
 		card.className = "rvhg-stat-card";
 		card.dataset.type = type;
-		card.innerHTML = `<div class="rvhg-stat-card-header">${config.icon} ${escapeHtml(type)}</div><div class="rvhg-stat-card-value">${stats[type] || 0}</div><div class="rvhg-stat-card-label">đơn hàng</div>`;
+		card.title = `${type}: ${stats[type] || 0} đơn`;
+		card.innerHTML = `<div class="rvhg-stat-card-header">${config.icon} ${escapeHtml(type)}</div><div class="rvhg-stat-card-value">${stats[type] || 0}</div>`;
 		card.addEventListener("click", () => toggleShippingTypeFilter(type));
 		if (filters.shippingType === type) card.classList.add("rvhg-active");
 		grid.appendChild(card);
@@ -864,62 +865,89 @@ function loadCustomerGroups() {
 async function loadInitialData() {
 	showLoading();
 	updateFilterStatus("Đang tải dữ liệu...");
-	await loadMoreInvoices();
-	renderStatistics();
-	applyFilters();
 	setupEventListeners();
+	await loadAllForRange();
 }
 
-// Thay frappe.client.get_list 1000 bằng method server (guarded, cùng base filter).
-function loadMoreInvoices() {
+// Tải 1 trang từ server (guarded, cùng base filter). Trả về true nếu CÒN trang nữa.
+function fetchNextPage() {
 	if (isLoading) return Promise.resolve(false);
 	isLoading = true;
-	const loadBtn = document.getElementById("rvhg-btn-load-more");
-	loadBtn.disabled = true;
-	loadBtn.innerHTML = '<div class="rvhg-spinner"></div> Đang tải...';
-	updateFilterStatus("Đang tải thêm dữ liệu...");
 	const startDate = getTimeRangeStartDate();
 	const apiFilters = {};
 	if (startDate) apiFilters.tu_ngay = startDate;
 	return callMethod("vanchuyen.api.dieu_hanh.get_invoices_dieu_phoi", { filters: JSON.stringify(apiFilters), page: loadPageNum, page_size: loadBatchSize })
 		.then((res) => {
 			isLoading = false;
-			loadBtn.disabled = false;
-			loadBtn.innerHTML = "📥 Tải thêm 1000 đơn hàng";
 			const rows = (res && res.rows) || [];
-			const total = (res && res.total) || 0;
+			totalAvailable = (res && res.total) || 0;
 			allInvoices = [...allInvoices, ...rows];
 			totalLoadedRecords += rows.length;
 			loadPageNum += 1;
-			if (allInvoices.length >= total || rows.length < loadBatchSize) {
-				hasMoreData = false;
-				document.getElementById("rvhg-load-more-section").style.display = "none";
-			}
-			rebuildShippingTypesFromData();
-			rebuildShippingStatusesFromData();
-			renderStatusLegend();
-			renderShippingTypeButtons();
-			renderStatusButtons();
-			renderExportButtons();
-			updateDataCounter();
-			updateFilterStatus(`Đã tải ${totalLoadedRecords} đơn hàng`);
-			renderStatistics();
-			renderManagerView();
-			updatePaginationButtons();
-			return true;
+			// Còn dữ liệu KHI: chưa tải đủ tổng VÀ trang vừa rồi có dữ liệu (chống lặp vô hạn).
+			hasMoreData = allInvoices.length < totalAvailable && rows.length > 0;
+			return hasMoreData;
 		})
 		.catch((err) => {
 			isLoading = false;
-			loadBtn.disabled = false;
-			loadBtn.innerHTML = "📥 Tải thêm 1000 đơn hàng";
+			hasMoreData = false;
 			console.error("Load error:", err);
 			showToast("Lỗi tải dữ liệu - kiểm tra Console", "error");
 			return false;
 		});
 }
 
+// Tự tải HẾT khoảng thời gian (theo lô 500) tới ngưỡng autoLoadCap, rồi vẽ 1 lần.
+// Nhờ vậy thống kê / lọc / phân trang phản ánh đúng toàn bộ tập đơn, không phải bấm "Tải thêm".
+async function loadAllForRange() {
+	const loadBtn = document.getElementById("rvhg-btn-load-more");
+	loadBtn.disabled = true;
+	let more = true;
+	while (more && allInvoices.length < autoLoadCap) {
+		loadBtn.innerHTML = `<div class="rvhg-spinner"></div> Đang tải… (${totalLoadedRecords.toLocaleString()} đơn)`;
+		updateFilterStatus(`Đang tải dữ liệu… ${totalLoadedRecords} đơn`);
+		updateDataCounter();
+		more = await fetchNextPage();
+	}
+	finishLoadRender();
+}
+
+// Nút "Tải thêm" thủ công: chỉ hiện khi vượt ngưỡng auto-load; tải 1 lô 500 nữa.
+async function loadMoreInvoices() {
+	const loadBtn = document.getElementById("rvhg-btn-load-more");
+	loadBtn.disabled = true;
+	loadBtn.innerHTML = '<div class="rvhg-spinner"></div> Đang tải…';
+	await fetchNextPage();
+	finishLoadRender();
+}
+
+function finishLoadRender() {
+	const loadBtn = document.getElementById("rvhg-btn-load-more");
+	loadBtn.disabled = false;
+	loadBtn.innerHTML = `📥 Tải thêm ${loadBatchSize} đơn`;
+	// Nút chỉ còn ý nghĩa khi vẫn còn dữ liệu server chưa tải (đã chạm ngưỡng auto-load).
+	document.getElementById("rvhg-load-more-section").style.display = hasMoreData ? "" : "none";
+	rebuildShippingTypesFromData();
+	rebuildShippingStatusesFromData();
+	renderStatusLegend();
+	renderShippingTypeButtons();
+	renderStatusButtons();
+	renderExportButtons();
+	updateDataCounter();
+	renderStatistics();
+	applyFilters();
+	updatePaginationButtons();
+}
+
 function updateDataCounter() {
-	document.getElementById("rvhg-data-counter").innerHTML = `📊 Đã tải: ${totalLoadedRecords.toLocaleString()} đơn`;
+	const el = document.getElementById("rvhg-data-counter");
+	if (!el) return;
+	// Hiển thị "đã tải / tổng" để rõ khi còn đơn chưa tải (vượt ngưỡng auto-load).
+	if (totalAvailable && totalLoadedRecords < totalAvailable) {
+		el.innerHTML = `📊 ${totalLoadedRecords.toLocaleString()}/${totalAvailable.toLocaleString()} đơn`;
+	} else {
+		el.innerHTML = `📊 ${totalLoadedRecords.toLocaleString()} đơn`;
+	}
 }
 
 function getPaginatedInvoices() {
@@ -1222,7 +1250,7 @@ export async function render({ container }) {
 	container.innerHTML = MARKUP;
 	// reset state (module cache tồn tại giữa các lần vào view)
 	allInvoices = []; customerGroups = []; selectedInvoices = []; shippingTypes = []; shippingStatuses = [];
-	currentPage = 1; totalLoadedRecords = 0; loadPageNum = 1; isLoading = false; hasMoreData = true;
+	currentPage = 1; totalLoadedRecords = 0; totalAvailable = 0; loadPageNum = 1; isLoading = false; hasMoreData = true;
 	currentTimeRange = "30"; lastSelectedIndex = -1;
 	filters = { today: false, yesterday: false, date: "", status: "", fromDate: "", toDate: "", customer: "", addressName: "", customerGroup: "", po: "", shippingType: null, statusFilter: null };
 
