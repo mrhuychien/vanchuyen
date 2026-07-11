@@ -34,15 +34,8 @@ const CSS_TEXT = `
   border:1px solid var(--rvhg-glass-border); padding:16px 18px; margin-bottom:14px; transition:transform .3s ease, box-shadow .3s ease; }
 .rvhg-glass-card:hover { transform:translateY(-2px); box-shadow:0 30px 60px -12px rgb(0 0 0 / 0.3); }
 .rvhg-header { background:linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.85) 100%); }
-.rvhg-header-content { display:flex; align-items:center; gap:14px; margin-bottom:12px; flex-wrap:wrap; }
-.rvhg-header-icon { background:linear-gradient(135deg,var(--rvhg-primary) 0%,var(--rvhg-accent) 100%); padding:10px;
-  border-radius:14px; display:flex; align-items:center; justify-content:center; box-shadow:0 8px 20px rgba(124,58,237,0.35); }
-.rvhg-header-icon svg { width:26px; height:26px; stroke:white; fill:none; stroke-width:2; }
-.rvhg-header-title h1 { font-size:1.5em; background:linear-gradient(135deg,var(--rvhg-primary) 0%,var(--rvhg-accent) 100%);
-  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; margin-bottom:2px; font-weight:800; letter-spacing:-.5px; }
-.rvhg-header-title p { color:var(--rvhg-gray-500); font-size:.82em; font-weight:500; }
 .rvhg-data-counter { background:linear-gradient(135deg,var(--rvhg-success) 0%,#059669 100%); color:white; padding:6px 12px;
-  border-radius:10px; font-weight:700; font-size:.82em; display:inline-flex; align-items:center; gap:8px; box-shadow:0 4px 12px rgba(16,185,129,0.3); }
+  border-radius:10px; font-weight:700; font-size:.82em; display:inline-flex; align-items:center; gap:8px; box-shadow:0 4px 12px rgba(16,185,129,0.3); white-space:nowrap; }
 .rvhg-time-range-section { background:linear-gradient(135deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.5) 100%);
   padding:10px 16px; border-radius:14px; border:1px solid var(--rvhg-gray-200); margin-bottom:10px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .rvhg-time-range-label { font-weight:700; color:var(--rvhg-gray-700); font-size:.95em; display:flex; align-items:center; gap:8px; }
@@ -237,7 +230,6 @@ const CSS_TEXT = `
 .rvhg-toast-warning { background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%); }
 @media (max-width:768px) {
   .rvhg-app { padding:16px; margin:-1rem; }
-  .rvhg-header-title h1 { font-size:1.25em; }
   .rvhg-invoice-header { flex-direction:column; }
   .rvhg-action-buttons { grid-template-columns:1fr; }
   .rvhg-modal-inner { padding:24px; }
@@ -262,20 +254,16 @@ const CSS_TEXT = `
 const MARKUP = `
 <div class="rvhg-app" id="rvhg-app"><div class="rvhg-container">
   <div class="rvhg-header rvhg-glass-card">
-    <div class="rvhg-header-content">
-      <div class="rvhg-header-icon"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
-      <div class="rvhg-header-title"><h1>🚚 Quản lý Vận chuyển</h1><p>Phân công vận chuyển và xuất báo cáo</p></div>
-      <div class="rvhg-data-counter" id="rvhg-data-counter">📊 Đang tải...</div>
-    </div>
     <div class="rvhg-time-range-section">
-      <div class="rvhg-time-range-label">⏱️ Khoảng thời gian:</div>
+      <div class="rvhg-time-range-label">⏱️</div>
       <div class="rvhg-time-range-buttons">
         <button class="rvhg-time-btn rvhg-active" type="button" data-range="30">30 ngày</button>
         <button class="rvhg-time-btn" type="button" data-range="60">60 ngày</button>
         <button class="rvhg-time-btn" type="button" data-range="90">90 ngày</button>
         <button class="rvhg-time-btn" type="button" data-range="all">Tất cả</button>
       </div>
-      <div style="margin-left:auto;color:var(--rvhg-gray-600);font-weight:600;font-size:.85em;" id="rvhg-time-range-info">Từ: ...</div>
+      <div class="rvhg-data-counter" id="rvhg-data-counter" style="margin-left:auto;">📊 Đang tải...</div>
+      <div style="color:var(--rvhg-gray-600);font-weight:600;font-size:.82em;" id="rvhg-time-range-info">Từ: ...</div>
     </div>
     <div class="rvhg-filters-section">
       <div class="rvhg-filters-row">
