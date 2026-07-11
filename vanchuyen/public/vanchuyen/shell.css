@@ -1027,6 +1027,129 @@
 	}
 }
 
+/* ── Xếp chuyến — mobile-first: xe/lái xe dạng NÚT, setup (xe trước) rồi pool ── */
+.vc-xep-grid {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 1rem;
+}
+@media (min-width: 768px) {
+	.vc-xep-grid {
+		grid-template-columns: 340px 1fr;
+		align-items: start;
+	}
+	.vc-xep-setup {
+		position: sticky;
+		top: calc(var(--vc-header-h) + 1rem);
+	}
+}
+.vc-chip-group {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+}
+.vc-chip-btn {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 1px;
+	min-width: 68px;
+	min-height: 44px;
+	justify-content: center;
+	padding: 0.5rem 0.85rem;
+	border-radius: 12px;
+	border: 1px solid var(--vc-border);
+	background: var(--vc-surface);
+	color: var(--vc-text-2);
+	font-weight: 700;
+	font-size: 0.85rem;
+	line-height: 1.15;
+	cursor: pointer;
+	font-family: inherit;
+	transition: transform 0.1s ease, box-shadow 0.15s ease;
+}
+.vc-chip-btn small {
+	font-weight: 600;
+	font-size: 0.68rem;
+	color: var(--vc-text-3);
+}
+.vc-chip-btn.active {
+	background: var(--vc-accent-grad);
+	color: #fff;
+	border-color: transparent;
+	box-shadow: var(--vc-shadow-md);
+}
+.vc-chip-btn.active small {
+	color: rgba(255, 255, 255, 0.85);
+}
+.vc-chip-btn:active {
+	transform: scale(0.97);
+}
+.vc-builder-rows-title {
+	font-size: 0.72rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	color: var(--vc-text-3);
+	margin: 0.6rem 0 0.4rem;
+}
+/* Thanh tổng tải + Xuất chuyến dính đáy (chỉ mobile; desktop dùng setup sticky) */
+.vc-xep-cta {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: var(--vc-bottom-h);
+	z-index: 60;
+	display: none;
+}
+.vc-xep-cta.show {
+	display: flex;
+	box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.08);
+}
+@media (min-width: 768px) {
+	.vc-xep-cta.show {
+		display: none;
+	}
+}
+.vc-xep-cta-info {
+	flex: 1;
+	background: rgba(255, 255, 255, 0.97);
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
+	border-top: 1px solid var(--vc-border);
+	padding: 0.7rem 0.9rem;
+	font-weight: 800;
+	font-size: 0.82rem;
+	color: var(--vc-text);
+	display: flex;
+	align-items: center;
+}
+.vc-xep-cta-info.warn {
+	color: var(--vc-warning);
+}
+.vc-xep-cta-info.over {
+	color: var(--vc-danger);
+}
+.vc-xep-cta-btn {
+	border: none;
+	background: var(--vc-accent-grad);
+	color: #fff;
+	font-weight: 800;
+	padding: 0.7rem 1.2rem;
+	font-size: 0.85rem;
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	cursor: pointer;
+	white-space: nowrap;
+	font-family: inherit;
+}
+@media (max-width: 767px) {
+	#vc-trips {
+		padding-bottom: 4rem;
+	}
+}
+
 /* ── Utility ───────────────────────────────────────────────────────────────── */
 .vc-flex {
 	display: flex;

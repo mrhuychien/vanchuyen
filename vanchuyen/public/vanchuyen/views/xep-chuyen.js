@@ -60,9 +60,15 @@ export async function render({ container }) {
 }
 
 function drawShell() {
+	// Mobile-first: setup (chọn XE trước → lái xe → ngày) lên ĐẦU, pool đơn ở dưới.
+	// Desktop ≥768px: 2 cột (setup trái sticky, pool phải).
 	ROOT.innerHTML = `
-		<div class="vc-two-col">
-			<div>
+		<div class="vc-xep-grid">
+			<div class="vc-xep-setup">
+				<div class="vc-section-title">Chuyến đang dựng</div>
+				<div id="vc-builder"></div>
+			</div>
+			<div class="vc-xep-pool">
 				<div class="vc-section-title">Pool đơn cần xếp</div>
 				<div class="vc-search-wrap">
 					<i class="fas fa-search"></i>
@@ -76,13 +82,10 @@ function drawShell() {
 				</div>
 				<div id="vc-pool-list"></div>
 			</div>
-			<div class="vc-sticky-col">
-				<div class="vc-section-title">Chuyến đang dựng</div>
-				<div id="vc-builder"></div>
-			</div>
 		</div>
 		<div class="vc-section-title">Chuyến Nháp / Đang giao</div>
-		<div id="vc-trips"></div>`;
+		<div id="vc-trips"></div>
+		<div class="vc-xep-cta" id="vc-xep-cta"></div>`;
 
 	const search = document.getElementById("vc-pool-search");
 	search.addEventListener("keydown", (e) => {
@@ -268,32 +271,37 @@ function drawBuilder() {
 	const wrap = document.getElementById("vc-builder");
 	if (!wrap) return;
 	const b = S.builder;
-	const driverOpts = ['<option value="">— chọn lái xe —</option>']
-		.concat(
-			S.drivers.map(
-				(d) => `<option value="${escapeHtml(d.name)}" ${d.name === b.lai_xe ? "selected" : ""}>${escapeHtml(d.full_name || d.name)}</option>`
-			)
-		)
-		.join("");
-	const vehicleOpts = ['<option value="">— chọn xe —</option>']
-		.concat(
-			S.vehicles.map(
-				(v) =>
-					`<option value="${escapeHtml(v.name)}" ${v.name === b.xe ? "selected" : ""}>${escapeHtml(v.name)}${
-						v.custom_the_tich_kha_dung ? ` (${formatM3(v.custom_the_tich_kha_dung)} m³)` : ""
-					}</option>`
-			)
-		)
-		.join("");
+
+	// Xe & lái xe = NÚT bấm (chip), tối ưu chạm 1 tay trên điện thoại (không droplist).
+	const xeChips = S.vehicles.length
+		? S.vehicles
+				.map(
+					(v) =>
+						`<button type="button" class="vc-chip-btn ${v.name === b.xe ? "active" : ""}" data-xe="${escapeHtml(v.name)}">` +
+						`<span>${escapeHtml(v.name)}</span>` +
+						`${v.custom_the_tich_kha_dung ? `<small>${formatM3(v.custom_the_tich_kha_dung)} m³</small>` : ""}</button>`
+				)
+				.join("")
+		: '<span class="vc-text-muted vc-text-sm">Chưa có xe khả dụng</span>';
+	const laixeChips = S.drivers.length
+		? S.drivers
+				.map(
+					(d) =>
+						`<button type="button" class="vc-chip-btn ${d.name === b.lai_xe ? "active" : ""}" data-laixe="${escapeHtml(d.name)}">` +
+						`<span>${escapeHtml(d.full_name || d.name)}</span></button>`
+				)
+				.join("")
+		: '<span class="vc-text-muted vc-text-sm">Chưa có lái xe</span>';
 
 	wrap.innerHTML = `
 	<div class="vc-card">
 		${b.name ? `<div class="vc-badge vc-badge-muted vc-mb-2">Đang sửa nháp: ${escapeHtml(b.name)}</div>` : ""}
-		<div class="vc-field"><label>Ngày giao</label><input class="vc-input" type="date" id="vc-b-ngay" value="${escapeHtml(b.ngay_giao)}" /></div>
-		<div class="vc-field"><label>Lái xe</label><select class="vc-select" id="vc-b-laixe">${driverOpts}</select></div>
-		<div class="vc-field"><label>Xe</label><select class="vc-select" id="vc-b-xe">${vehicleOpts}</select></div>
+		<div class="vc-field"><label>Bước 1 · Chọn xe</label><div class="vc-chip-group" id="vc-b-xe-group">${xeChips}</div></div>
+		<div class="vc-field"><label>Bước 2 · Chọn lái xe</label><div class="vc-chip-group" id="vc-b-laixe-group">${laixeChips}</div></div>
+		<div class="vc-field"><label>Bước 3 · Ngày giao</label><input class="vc-input" type="date" id="vc-b-ngay" value="${escapeHtml(b.ngay_giao)}" /></div>
 		${loadBar()}
-		<div id="vc-b-rows">${b.rows.length ? b.rows.map(builderRow).join("") : '<div class="vc-text-muted vc-text-sm vc-text-center vc-mt-2 vc-mb-2">Chọn đơn từ pool để thêm vào chuyến</div>'}</div>
+		<div class="vc-builder-rows-title">Đơn đã chọn (${b.rows.length})</div>
+		<div id="vc-b-rows">${b.rows.length ? b.rows.map(builderRow).join("") : '<div class="vc-text-muted vc-text-sm vc-text-center vc-mt-2 vc-mb-2">Chọn xe trước, rồi chọn đơn từ pool bên dưới ⬇</div>'}</div>
 		<div class="vc-flex vc-gap-2 vc-mt-3">
 			<button class="vc-btn-ghost" id="vc-b-clear" style="flex:1">Làm lại</button>
 			<button class="vc-btn-primary" id="vc-b-save" style="flex:1"><i class="fas fa-save"></i> Lưu nháp</button>
@@ -301,12 +309,19 @@ function drawBuilder() {
 		<button class="vc-btn-success vc-btn-block vc-mt-2" id="vc-b-submit"><i class="fas fa-paper-plane"></i> Lưu & Xuất chuyến</button>
 	</div>`;
 
+	wrap.querySelectorAll("[data-xe]").forEach((btn) =>
+		btn.addEventListener("click", () => {
+			b.xe = btn.dataset.xe;
+			drawBuilder();
+		})
+	);
+	wrap.querySelectorAll("[data-laixe]").forEach((btn) =>
+		btn.addEventListener("click", () => {
+			b.lai_xe = btn.dataset.laixe;
+			drawBuilder();
+		})
+	);
 	document.getElementById("vc-b-ngay").addEventListener("change", (e) => (b.ngay_giao = e.target.value));
-	document.getElementById("vc-b-laixe").addEventListener("change", (e) => (b.lai_xe = e.target.value));
-	document.getElementById("vc-b-xe").addEventListener("change", (e) => {
-		b.xe = e.target.value;
-		drawBuilder();
-	});
 	wrap.querySelectorAll("[data-remove]").forEach((btn) =>
 		btn.addEventListener("click", () => {
 			b.rows = b.rows.filter((r) => r.sales_invoice !== btn.dataset.remove);
@@ -334,6 +349,33 @@ function drawBuilder() {
 	});
 	document.getElementById("vc-b-save").addEventListener("click", () => saveTrip(false));
 	document.getElementById("vc-b-submit").addEventListener("click", () => saveTrip(true));
+
+	updateCta();
+}
+
+// Thanh dính đáy trên mobile: tổng tải + nút Xuất — để tài xế thấy % tải & chốt
+// chuyến ngay khi đang cuộn trong pool (setup đã ở trên, khuất tầm nhìn).
+function updateCta() {
+	const cta = document.getElementById("vc-xep-cta");
+	if (!cta) return;
+	const b = S.builder;
+	if (!b.rows.length) {
+		cta.className = "vc-xep-cta";
+		cta.innerHTML = "";
+		return;
+	}
+	const cap = vehicleVol();
+	const used = builderVol();
+	const pct = cap > 0 ? Math.round((used / cap) * 100) : 0;
+	let tone = "";
+	if (cap > 0 && pct > 100) tone = "over";
+	else if (cap > 0 && pct >= 90) tone = "warn";
+	cta.className = "vc-xep-cta show";
+	cta.innerHTML =
+		`<div class="vc-xep-cta-info ${tone}">${b.rows.length} đơn · ` +
+		`${cap > 0 ? `${formatM3(used)} / ${formatM3(cap)} m³ (${pct}%)` : `${formatM3(used)} m³`}</div>` +
+		`<button type="button" class="vc-xep-cta-btn" id="vc-cta-submit"><i class="fas fa-paper-plane"></i> Xuất</button>`;
+	document.getElementById("vc-cta-submit").addEventListener("click", () => saveTrip(true));
 }
 
 function builderRow(r) {
