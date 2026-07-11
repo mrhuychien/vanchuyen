@@ -141,6 +141,9 @@ def _reconcile_one(si):
 	latest = max(trips, key=lambda t: t.creation) if trips else None
 	values = {
 		"custom_chuyến_xe": chuyen_str,
+		# Field Link mới (app sở hữu) → BẤM MỞ nhanh chuyến MỚI NHẤT còn hiệu lực. Đơn tách
+		# nhiều chuyến vẫn xem đủ mã ở custom_chuyến_xe (Data). "" khi không còn chuyến nào.
+		"custom_chuyen_xe_link": latest.name if latest else "",
 		# Link chỉ chứa 1 giá trị → driver của chuyến MỚI NHẤT còn hiệu lực.
 		"custom_lái_xe": latest.lai_xe if latest else "",
 		"custom_tên_lái_xe": " / ".join((t.ten_lai_xe or "") for t in trips),

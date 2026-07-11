@@ -92,5 +92,17 @@
   "fieldtype": "Data",
   "insert_after": "custom_điện_thoại_lái_xe",
   "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-custom_chuyen_xe_link",
+  "dt": "Sales Invoice",
+  "fieldname": "custom_chuyen_xe_link",
+  "label": "Chuyến xe (mở)",
+  "fieldtype": "Link",
+  "options": "Chuyen Xe",
+  "read_only": 1,
+  "insert_after": "custom_chuyến_xe",
+  "module": "Van Chuyen"
  }
 ]
