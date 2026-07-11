@@ -96,7 +96,8 @@ const CSS_TEXT = `
 .rvhg-stat-card-value { font-size:1.5rem; font-weight:800; color:var(--rvhg-gray-800); line-height:1; flex-shrink:0; }
 .rvhg-card-title { font-size:1.15em; font-weight:800; color:var(--rvhg-gray-800); margin-bottom:12px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .rvhg-status-legend { margin-left:auto; display:flex; gap:10px; font-size:.55em; font-weight:600; flex-wrap:wrap; }
-.rvhg-status-legend-item { padding:8px 14px; border-radius:10px; white-space:nowrap; cursor:pointer; transition:all .25s ease; border:2px solid transparent; }
+.rvhg-status-legend-item { padding:8px 14px; border-radius:10px; white-space:nowrap; cursor:pointer; transition:all .25s ease; border:2px solid transparent; display:inline-flex; align-items:center; gap:8px; }
+.rvhg-status-legend-count { background:rgba(0,0,0,0.14); border-radius:999px; padding:1px 8px; font-weight:800; font-size:1.05em; line-height:1.5; min-width:20px; text-align:center; }
 .rvhg-status-legend-item:hover { transform:translateY(-2px); box-shadow:0 6px 16px rgba(0,0,0,0.12); }
 .rvhg-status-legend-item.rvhg-active { border-color:var(--rvhg-primary); box-shadow:0 6px 16px rgba(124,58,237,0.25); transform:translateY(-2px); }
 .rvhg-status-processing { background:linear-gradient(135deg,#fef3c7 0%,#fde68a 100%); color:#92400e; }
@@ -533,12 +534,14 @@ function renderStatusLegend() {
 		"Đã giao hàng, chụp chứng từ": { icon: "📸", class: "rvhg-status-delivered" },
 		"Đã nộp chứng từ": { icon: "✅", class: "rvhg-status-submitted" },
 	};
+	const counts = calculateStatusCounts();
 	shippingStatuses.forEach((status) => {
 		const c = cfg[status] || { icon: "📋", class: "rvhg-status-processing" };
 		const item = document.createElement("span");
 		item.className = `rvhg-status-legend-item ${c.class}`;
 		item.dataset.status = status;
-		item.textContent = `${c.icon} ${status}`;
+		item.title = `${status}: ${counts[status] || 0} đơn`;
+		item.innerHTML = `${c.icon} ${escapeHtml(status)}<span class="rvhg-status-legend-count">${counts[status] || 0}</span>`;
 		item.addEventListener("click", () => toggleStatusFilter(status));
 		legend.appendChild(item);
 	});
@@ -603,6 +606,19 @@ function renderExportButtons() {
 	}
 }
 
+function calculateStatusCounts() {
+	const counts = {};
+	shippingStatuses.forEach((s) => { counts[s] = 0; });
+	const startDate = getTimeRangeStartDate();
+	allInvoices.forEach((inv) => {
+		if (startDate && inv.posting_date < startDate) return;
+		let s = inv[F.shipping_status];
+		s = s && s.trim() ? s.trim() : "Đang xử lý"; // đơn chưa set trạng thái ~ Đang xử lý
+		if (counts[s] === undefined) counts[s] = 0;
+		counts[s]++;
+	});
+	return counts;
+}
 function calculateStatistics() {
 	const stats = {};
 	shippingTypes.forEach((type) => { stats[type] = 0; });
