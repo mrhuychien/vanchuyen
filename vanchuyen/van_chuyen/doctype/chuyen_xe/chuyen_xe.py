@@ -16,6 +16,16 @@ from frappe.utils import flt
 EPS = 0.001            # custom_tổng_kiện là Float → mọi so sánh dùng epsilon
 OVERLOAD_HARD = 1.10   # >110% thể tích khả dụng → chặn cứng; >100% → cảnh báo
 
+# Thang bậc trạng thái vận chuyển của Sales Invoice — reconcile CHỈ tiến, không lùi.
+VC_RANK = {
+	"": 0,
+	"Chờ xử lý": 0,
+	"Đang xử lý": 1,
+	"Đang giao hàng": 2,
+	"Đã giao hàng, chụp chứng từ": 3,
+	"Đã nộp chứng từ": 4,
+}
+
 
 def _fmt(v):
 	"""Số gọn cho message lỗi tiếng Việt (bỏ số 0 thừa): 8, 12, 4.5."""
@@ -125,6 +135,7 @@ def _reconcile_one(si):
 	tong = _si_tong(si)
 	trips = _trips_holding(si)
 	xep = da_xep(si)
+	giao = da_giao(si)
 
 	chuyen_str = ", ".join(t.name for t in trips)
 	latest = max(trips, key=lambda t: t.creation) if trips else None
@@ -144,8 +155,18 @@ def _reconcile_one(si):
 	else:
 		values["custom_trang_thai_xep"] = "Chưa xếp"
 
-	# TUYỆT ĐỐI KHÔNG ghi custom_trạng_thái_vận_chuyển / custom_hình_thức_vận_chuyển — 2 field này
-	# do app khác quản lý vòng đời; vanchuyen chỉ ĐỌC (lọc pool 'Tự vận chuyển'), không bao giờ ghi.
+	# Trạng thái vận chuyển: CHỈ field này được bảo vệ (§2.4) — ghi tiến (rank tăng) + KHÔNG BAO
+	# GIỜ ghi đè khi đang 'Đã nộp chứng từ', không hạ cấp. Các field chuyến/lái xe/SĐT/xe ở TRÊN
+	# VẪN ghi bình thường: đơn phải thấy thông tin chuyến kể cả khi trạng thái đã 'Đã nộp chứng từ'.
+	cur = frappe.db.get_value("Sales Invoice", si, "custom_trạng_thái_vận_chuyển") or ""
+	new_vc = None
+	if tong > 0 and giao >= tong - EPS:
+		new_vc = "Đã giao hàng, chụp chứng từ"
+	elif any(t.trang_thai == "Đang giao" for t in trips):
+		new_vc = "Đang giao hàng"
+	if new_vc and cur != "Đã nộp chứng từ" and VC_RANK.get(new_vc, 0) > VC_RANK.get(cur, 0):
+		values["custom_trạng_thái_vận_chuyển"] = new_vc
+
 	frappe.db.set_value("Sales Invoice", si, values, update_modified=False)
 
 
