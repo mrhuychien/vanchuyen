@@ -132,12 +132,6 @@ def reconcile(si_list):
 
 
 def _reconcile_one(si):
-	# Acceptance (f): SI đã 'Đã nộp chứng từ' → KHÔNG BAO GIỜ bị reconcile ghi đè (mọi field,
-	# không chỉ trạng thái VC). Trường này do app khác sở hữu; 'đã nộp' = đã tất toán.
-	cur = frappe.db.get_value("Sales Invoice", si, "custom_trạng_thái_vận_chuyển") or ""
-	if cur == "Đã nộp chứng từ":
-		return
-
 	tong = _si_tong(si)
 	trips = _trips_holding(si)
 	xep = da_xep(si)
@@ -161,7 +155,10 @@ def _reconcile_one(si):
 	else:
 		values["custom_trang_thai_xep"] = "Chưa xếp"
 
-	# Trạng thái vận chuyển: chỉ ghi 2 giá trị, chỉ tiến (cur đã != 'Đã nộp chứng từ' ở guard trên).
+	# Trạng thái vận chuyển: CHỈ field này được bảo vệ (§2.4) — ghi tiến (rank tăng) + KHÔNG BAO
+	# GIỜ ghi đè khi đang 'Đã nộp chứng từ', không hạ cấp. Các field chuyến/lái xe/SĐT/xe ở TRÊN
+	# VẪN ghi bình thường: đơn phải thấy thông tin chuyến kể cả khi trạng thái đã 'Đã nộp chứng từ'.
+	cur = frappe.db.get_value("Sales Invoice", si, "custom_trạng_thái_vận_chuyển") or ""
 	new_vc = None
 	if tong > 0 and giao >= tong - EPS:
 		new_vc = "Đã giao hàng, chụp chứng từ"
