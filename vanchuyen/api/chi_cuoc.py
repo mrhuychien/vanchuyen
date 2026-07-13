@@ -41,7 +41,7 @@ def _accounts():
 		"debit": _cfg("cuoc_debit_account", "6412 - Chi phí bán hàng GT - HGC"),
 		"credit": _cfg("cuoc_credit_account", "141 - Tạm ứng - HGC"),
 		"party_type": _cfg("cuoc_credit_party_type", "Employee"),
-		"party": _cfg("cuoc_credit_party", None),
+		"party": _cfg("cuoc_credit_party", "HR-EMP-00001"),
 	}
 
 

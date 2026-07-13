@@ -7,39 +7,79 @@ import { showToast } from "../components/toast.js";
 import { showModal } from "../components/modal.js";
 import { confirmDialog } from "../components/confirm.js";
 
-// BIN VietQR các ngân hàng phổ biến (map tên/alias → mã).
+// BIN VietQR các ngân hàng phổ biến (map tên/alias → mã). Tự nhận diện không phân biệt
+// dấu/khoảng trắng/hoa thường: "MB Bank" = "mbbank" = "Ngân hàng MB".
 const BANKS = [
-	["970422", "MB Bank", ["mb", "mbbank", "mb bank"]],
-	["970436", "Vietcombank", ["vcb", "vietcombank"]],
-	["970415", "VietinBank", ["vietinbank", "ctg"]],
-	["970418", "BIDV", ["bidv"]],
-	["970405", "Agribank", ["agribank", "agri"]],
-	["970407", "Techcombank", ["tcb", "techcombank"]],
-	["970416", "ACB", ["acb"]],
-	["970423", "TPBank", ["tpbank", "tpb"]],
-	["970432", "VPBank", ["vpbank", "vpb"]],
-	["970403", "Sacombank", ["sacombank", "stb"]],
-	["970437", "HDBank", ["hdbank", "hdb"]],
-	["970443", "SHB", ["shb"]],
-	["970448", "OCB", ["ocb"]],
-	["970449", "LPBank", ["lpbank", "lpb", "lienvietpostbank"]],
-	["970441", "VIB", ["vib"]],
-	["970440", "SeABank", ["seabank"]],
-	["970426", "MSB", ["msb"]],
-	["970431", "Eximbank", ["eximbank", "eib"]],
-	["970400", "SCB", ["scb"]],
+	["970422", "MB Bank", ["mb", "mbbank", "militarybank", "quandoi"]],
+	["970436", "Vietcombank", ["vcb", "ngoaithuong"]],
+	["970415", "VietinBank", ["vietinbank", "ctg", "congthuong", "viettin"]],
+	["970418", "BIDV", ["bidv", "dautu"]],
+	["970405", "Agribank", ["agri", "nongnghiep"]],
+	["970407", "Techcombank", ["tcb", "techcom", "ky thuong", "kythuong"]],
+	["970416", "ACB", ["a chau", "achau"]],
+	["970423", "TPBank", ["tpb", "tienphong"]],
+	["970432", "VPBank", ["vpb", "vietnamthinhvuong", "thinhvuong"]],
+	["970403", "Sacombank", ["stb", "saigonthuongtin"]],
+	["970437", "HDBank", ["hdb", "hd bank"]],
+	["970443", "SHB", ["saigonhanoi"]],
+	["970448", "OCB", ["phuongdong"]],
+	["970449", "LPBank", ["lpb", "lienvietpostbank", "lienviet", "loc phat", "locphat"]],
+	["970441", "VIB", ["quocte"]],
+	["970440", "SeABank", ["seab", "dongnama"]],
+	["970426", "MSB", ["maritime", "hanghai"]],
+	["970431", "Eximbank", ["eib", "xuatnhapkhau"]],
+	["970400", "SCB", ["saigon"]],
+	["970429", "SCBVietnam", []],
+	["970419", "NCB", ["quocdan"]],
+	["970425", "ABBank", ["anbinh"]],
+	["970409", "BacABank", ["bab", "bac a", "baca"]],
+	["970428", "NamABank", ["nam a", "nama"]],
+	["970430", "PGBank", ["xangdau"]],
+	["970438", "BaoVietBank", ["baoviet"]],
+	["970452", "KienLongBank", ["klb", "kienlong"]],
+	["970454", "BVBank", ["banviet", "vietcapital"]],
+	["970457", "Woori", ["wooribank"]],
+	["970458", "UnitedOverseas", ["uob"]],
+	["970442", "HongLeong", ["hongleong"]],
+	["970421", "VRB", ["vietnga"]],
+	["970412", "PVcomBank", ["pvcom", "pvb"]],
+	["970414", "Oceanbank", ["ocean", "daiduong"]],
+	["546034", "CAKE", ["cakebyvpbank"]],
+	["963388", "TIMO", ["timobyvpbank"]],
+	["970424", "ShinhanBank", ["shinhan"]],
+	["970462", "KookminHN", ["kookmin"]],
+	["970434", "IndovinaBank", ["indovina", "ivb"]],
 ];
+function norm(s) {
+	return String(s || "")
+		.toLowerCase()
+		.normalize("NFD")
+		.replace(/[̀-ͯ]/g, "")
+		.replace(/đ/g, "d")
+		.replace(/[^a-z0-9]/g, "");
+}
 const BANK_BIN = (() => {
 	const m = {};
 	BANKS.forEach(([bin, name, aliases]) => {
-		m[name.toLowerCase().trim()] = bin;
-		aliases.forEach((a) => (m[a] = bin));
+		m[norm(name)] = bin;
+		(aliases || []).forEach((a) => {
+			m[norm(a)] = bin;
+		});
 	});
 	return m;
 })();
 function bankBin(name) {
-	if (!name) return "";
-	return BANK_BIN[String(name).toLowerCase().trim()] || "";
+	const n = norm(name);
+	if (!n) return "";
+	if (BANK_BIN[n]) return BANK_BIN[n];
+	// bỏ hậu tố "bank"/"nganhang", tiền tố "nganhang"
+	const n2 = n.replace(/^nganhang/, "").replace(/(bank|nganhang)$/, "");
+	if (n2 && BANK_BIN[n2]) return BANK_BIN[n2];
+	// khớp bao hàm (tên chứa alias hoặc ngược lại)
+	for (const k in BANK_BIN) {
+		if (k.length >= 3 && (n.includes(k) || (n2 && n2.includes(k)))) return BANK_BIN[k];
+	}
+	return "";
 }
 function vietQrUrl(bank, amount, content) {
 	const bin = bankBin(bank.nganhang);
@@ -55,7 +95,7 @@ const WEEKDAYS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
 const pad = (n) => String(n).padStart(2, "0");
 
 let ROOT = null;
-const S = { nam: 0, thang: 0, selected: null, cal: {}, trips: [] };
+const S = { nam: 0, thang: 0, selected: null, cal: {}, trips: [], dayFilter: "all" };
 
 const CSS = `
 .tc-cal { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
@@ -78,6 +118,9 @@ const CSS = `
 .tc-cuoc-row { display:flex; align-items:center; gap:.5rem; margin:.5rem 0; flex-wrap:wrap; }
 .tc-cuoc-input { width:130px; padding:.5rem; border:1.5px solid var(--vc-border,#d1d5db); border-radius:8px; font-size:.95rem; font-weight:700; font-family:inherit; }
 .tc-paid { background:#ecfdf5; border-color:#6ee7b7; }
+.tc-pills { display:flex; gap:.4rem; margin-bottom:.6rem; flex-wrap:wrap; }
+.tc-pill { padding:.4rem .8rem; border-radius:999px; border:1.5px solid var(--vc-border,#e5e7eb); background:#fff; font-size:.8rem; font-weight:600; cursor:pointer; font-family:inherit; color:var(--vc-text,#1f2937); }
+.tc-pill.on { background:#6366f1; color:#fff; border-color:#6366f1; }
 `;
 
 function injectCss() {
@@ -203,7 +246,9 @@ function drawDay(trips) {
 			<div class="vc-empty-title">Không có chuyến nào ngày ${escapeHtml(formatDate(S.selected))}</div></div></div>`;
 		return;
 	}
+	S.dayFilter = "all";
 	const unpaid = trips.filter((t) => !t.da_tra_cuoc && t.tong_cuoc > 0);
+	const paidCount = trips.filter((t) => t.da_tra_cuoc).length;
 	const tongNgay = trips.reduce((a, t) => a + Number(t.tong_cuoc || 0), 0);
 	box.innerHTML = `
 		<div class="vc-card vc-mb-3">
@@ -213,7 +258,12 @@ function drawDay(trips) {
 			</div>
 			${unpaid.length ? `<button class="vc-btn-primary vc-btn-block vc-mt-2" id="tc-pay-day"><i class="fas fa-file-invoice-dollar"></i> Tạo bút toán cả ngày (${unpaid.length} chuyến chưa trả)</button>` : ""}
 		</div>
-		<div class="vc-list">${trips.map(tripCard).join("")}</div>`;
+		<div class="tc-pills" id="tc-pills">
+			<button class="tc-pill on" data-f="all">Tất cả (${trips.length})</button>
+			<button class="tc-pill" data-f="unpaid">Chưa trả (${trips.length - paidCount})</button>
+			<button class="tc-pill" data-f="paid">Đã trả (${paidCount})</button>
+		</div>
+		<div class="vc-list" id="tc-trip-list"></div>`;
 
 	if (unpaid.length) {
 		document.getElementById("tc-pay-day").addEventListener("click", () =>
@@ -234,6 +284,25 @@ function drawDay(trips) {
 			})
 		);
 	}
+	document.getElementById("tc-pills").querySelectorAll(".tc-pill").forEach((b) =>
+		b.addEventListener("click", () => {
+			S.dayFilter = b.dataset.f;
+			document.querySelectorAll("#tc-pills .tc-pill").forEach((p) => p.classList.toggle("on", p.dataset.f === S.dayFilter));
+			renderTripList();
+		})
+	);
+	renderTripList();
+}
+
+function renderTripList() {
+	const list = document.getElementById("tc-trip-list");
+	if (!list) return;
+	let items = S.trips;
+	if (S.dayFilter === "unpaid") items = S.trips.filter((t) => !t.da_tra_cuoc);
+	else if (S.dayFilter === "paid") items = S.trips.filter((t) => t.da_tra_cuoc);
+	list.innerHTML = items.length
+		? items.map(tripCard).join("")
+		: '<div class="vc-text-muted vc-text-sm vc-text-center vc-mt-2">Không có chuyến phù hợp.</div>';
 	bindTrips();
 }
 
