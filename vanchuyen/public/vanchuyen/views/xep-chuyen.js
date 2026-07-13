@@ -165,7 +165,10 @@ function poolCard(o) {
 				<div class="vc-order-cust">${escapeHtml(o.khach_hang || "")}</div>
 				<div class="vc-order-addr">${escapeHtml(o.dia_chi || "")}</div>
 			</div>
-			${o.po ? `<span class="vc-badge vc-badge-primary">PO ${escapeHtml(o.po)}</span>` : ""}
+			<div class="vc-flex vc-flex-col" style="align-items:flex-end;gap:.25rem;flex-shrink:0">
+				${o.posting_date ? `<span class="vc-badge vc-badge-muted"><i class="fas fa-calendar-day"></i> ${escapeHtml(formatDate(o.posting_date))}</span>` : ""}
+				${o.po ? `<span class="vc-badge vc-badge-primary">PO ${escapeHtml(o.po)}</span>` : ""}
+			</div>
 		</div>
 		<div class="vc-order-meta">
 			<span class="vc-chip vc-chip-accent">còn ${formatQty(o.con_lai)}/${formatQty(o.tong_kien)} kiện</span>
