@@ -18,28 +18,22 @@ TO_TRUONG_ROLE = "Điều Phối Vận Chuyển"  # tổ trưởng = role Điề
 
 
 def _set_user_role(email, role, on):
-	"""Thêm / gỡ 1 role cho User (Website User vẫn không vào desk vì role desk_access=0).
-
-	Sau khi gán, reload để chắc role THỰC SỰ dính — một số cấu hình Frappe hạn chế role
-	của Website User; nếu bị bỏ thì báo lỗi rõ thay vì tạo tài khoản không đăng nhập được."""
+	"""Best-effort thêm / gỡ 1 role cho User. KHÔNG phải nguồn tin cậy cho tổ trưởng —
+	nguồn chính là cờ Driver.custom_is_to_truong (một số cấu hình Frappe bỏ role tuỳ biến
+	khỏi Website User). Bọc try/except để không chặn thao tác chính khi role bị hạn chế."""
 	if not email or not frappe.db.exists("User", email):
 		return
-	user = frappe.get_doc("User", email)
-	has = role in [r.role for r in user.get("roles", [])]
-	if on and not has:
-		user.append("roles", {"role": role})
-		user.save(ignore_permissions=True)
-		user.reload()
-		if role not in [r.role for r in user.get("roles", [])]:
-			frappe.throw(
-				_(
-					"Không gán được quyền '{0}' cho tài khoản {1}. Tài khoản Website User đang bị "
-					"hạn chế role — vào Desk mở User Type 'Website User' và thêm role này vào danh sách."
-				).format(role, email)
-			)
-	elif not on and has:
-		user.set("roles", [r for r in user.get("roles", []) if r.role != role])
-		user.save(ignore_permissions=True)
+	try:
+		user = frappe.get_doc("User", email)
+		has = role in [r.role for r in user.get("roles", [])]
+		if on and not has:
+			user.append("roles", {"role": role})
+			user.save(ignore_permissions=True)
+		elif not on and has:
+			user.set("roles", [r for r in user.get("roles", []) if r.role != role])
+			user.save(ignore_permissions=True)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "to_truong._set_user_role")
 
 
 def _gen_token():
@@ -94,11 +88,14 @@ def _driver_payload(driver_name):
 	d = frappe.db.get_value(
 		"Driver",
 		driver_name,
-		["name", "full_name", "cell_number", "custom_user", "custom_login_token"],
+		["name", "full_name", "cell_number", "custom_user", "custom_login_token", "custom_is_to_truong"],
 		as_dict=True,
 	)
 	enabled = frappe.db.get_value("User", d.custom_user, "enabled") if d.custom_user else 0
-	is_tt = TO_TRUONG_ROLE in frappe.get_roles(d.custom_user) if d.custom_user else False
+	# Nguồn tin cậy = cờ Driver; role chỉ là phụ trợ (System User).
+	is_tt = bool(d.custom_is_to_truong) or (
+		bool(d.custom_user) and TO_TRUONG_ROLE in frappe.get_roles(d.custom_user)
+	)
 	return {
 		"driver": d.name,
 		"full_name": d.full_name,
@@ -190,6 +187,8 @@ def set_driver_as_to_truong(driver, on):
 		# Chưa có tài khoản → cấp luôn (Website User + role Lái Xe) rồi mới gắn tổ trưởng.
 		email = _ensure_user(d.full_name, d.cell_number)
 		frappe.db.set_value("Driver", driver, {"custom_user": email, "custom_login_token": _gen_token()})
+	# Cờ Driver là nguồn tin cậy; role chỉ best-effort (System User).
+	frappe.db.set_value("Driver", driver, "custom_is_to_truong", cint(on))
 	_set_user_role(email, TO_TRUONG_ROLE, cint(on))
 	frappe.db.commit()
 	return _driver_payload(driver)
@@ -212,6 +211,7 @@ def create_to_truong_account(full_name, cell_number):
 			"cell_number": cell_number,
 			"custom_user": email,
 			"custom_login_token": _gen_token(),
+			"custom_is_to_truong": 1,
 		}
 	).insert(ignore_permissions=True)
 	frappe.db.commit()

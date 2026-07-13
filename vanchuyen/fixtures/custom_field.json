@@ -117,5 +117,16 @@
   "hidden": 1,
   "insert_after": "custom_user",
   "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Driver-custom_is_to_truong",
+  "dt": "Driver",
+  "fieldname": "custom_is_to_truong",
+  "label": "Là tổ trưởng",
+  "fieldtype": "Check",
+  "description": "Tổ trưởng: được xếp chuyến + tạo/cấp tài khoản lái xe (không phụ thuộc role Frappe)",
+  "insert_after": "custom_login_token",
+  "module": "Van Chuyen"
  }
 ]

@@ -28,12 +28,17 @@ def get_context(context):
 		raise frappe.Redirect
 
 	roles = set(frappe.get_roles(frappe.session.user))
-	is_dieu_phoi = "Điều Phối Vận Chuyển" in roles
-	is_lai_xe = "Lái Xe" in roles
+	# Lái xe / tổ trưởng dùng tài khoản Website User; một số cấu hình Frappe không giữ role
+	# tuỳ biến trên Website User → nhận diện QUA Driver link (nguồn tin cậy) thay vì chỉ role.
+	drv = frappe.db.get_value(
+		"Driver", {"custom_user": frappe.session.user}, ["name", "custom_is_to_truong"], as_dict=True
+	)
+	driver_name = drv.name if drv else None
+	is_dieu_phoi = "Điều Phối Vận Chuyển" in roles or bool(drv and drv.custom_is_to_truong)
+	is_lai_xe = "Lái Xe" in roles or bool(drv)
 	# Điều hành = admin logistics đã có quyền Sales Invoice (view Phase 2).
 	is_dieu_hanh = bool(frappe.has_permission("Sales Invoice", "write"))
 	is_admin = frappe.session.user == "Administrator" or "System Manager" in roles
-	driver_name = frappe.db.get_value("Driver", {"custom_user": frappe.session.user}, "name")
 
 	try:
 		csrf = frappe.sessions.get_csrf_token()

@@ -22,9 +22,20 @@ def require_admin():
 		frappe.throw(_("Chỉ quản trị viên được phép thao tác này."), frappe.PermissionError)
 
 
+def is_to_truong(user=None):
+	"""Tổ trưởng = có role Điều Phối HOẶC Driver gắn cờ custom_is_to_truong.
+
+	Cờ trên Driver là nguồn tin cậy: tài khoản portal là Website User, một số cấu hình
+	Frappe không giữ role tuỳ biến trên Website User → không thể chỉ dựa vào role."""
+	user = user or frappe.session.user
+	if DIEU_PHOI_ROLE in frappe.get_roles(user):
+		return True
+	return bool(frappe.db.get_value("Driver", {"custom_user": user, "custom_is_to_truong": 1}, "name"))
+
+
 def require_dieu_phoi():
-	"""Throw PermissionError nếu session user thiếu role Điều Phối (quản trị viên luôn được phép)."""
-	if DIEU_PHOI_ROLE not in frappe.get_roles(frappe.session.user) and not is_admin():
+	"""Throw PermissionError nếu không phải tổ trưởng (role Điều Phối / cờ Driver) hay quản trị viên."""
+	if not is_to_truong() and not is_admin():
 		frappe.throw(_("Chỉ Điều Phối Vận Chuyển được phép thao tác này."), frappe.PermissionError)
 
 
