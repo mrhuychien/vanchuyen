@@ -18,7 +18,10 @@ TO_TRUONG_ROLE = "Điều Phối Vận Chuyển"  # tổ trưởng = role Điề
 
 
 def _set_user_role(email, role, on):
-	"""Thêm / gỡ 1 role cho User (Website User vẫn không vào desk vì user_type)."""
+	"""Thêm / gỡ 1 role cho User (Website User vẫn không vào desk vì role desk_access=0).
+
+	Sau khi gán, reload để chắc role THỰC SỰ dính — một số cấu hình Frappe hạn chế role
+	của Website User; nếu bị bỏ thì báo lỗi rõ thay vì tạo tài khoản không đăng nhập được."""
 	if not email or not frappe.db.exists("User", email):
 		return
 	user = frappe.get_doc("User", email)
@@ -26,6 +29,14 @@ def _set_user_role(email, role, on):
 	if on and not has:
 		user.append("roles", {"role": role})
 		user.save(ignore_permissions=True)
+		user.reload()
+		if role not in [r.role for r in user.get("roles", [])]:
+			frappe.throw(
+				_(
+					"Không gán được quyền '{0}' cho tài khoản {1}. Tài khoản Website User đang bị "
+					"hạn chế role — vào Desk mở User Type 'Website User' và thêm role này vào danh sách."
+				).format(role, email)
+			)
 	elif not on and has:
 		user.set("roles", [r for r in user.get("roles", []) if r.role != role])
 		user.save(ignore_permissions=True)
