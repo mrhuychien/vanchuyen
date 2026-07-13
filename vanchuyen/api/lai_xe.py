@@ -13,12 +13,12 @@ VALID_STOP_STATUS = ("Chờ giao", "Đã giao", "Khách hẹn", "Hoàn")
 
 @frappe.whitelist()
 def get_my_trips():
-	"""Chuyến của tôi: 'Đang giao' + 'Hoàn thành' hôm nay. Stops tối giản, không có tiền."""
+	"""Chuyến của tôi: 'Đang giao' + 'Hoàn thành' hôm nay. Kèm tổng cước chuyến của lái xe."""
 	driver = require_driver()
 	today = nowdate()
 	trips = frappe.db.sql(
 		"""
-		SELECT name, ngay_giao, trang_thai, xe, ten_lai_xe, sdt_lai_xe
+		SELECT name, ngay_giao, trang_thai, xe, ten_lai_xe, sdt_lai_xe, tong_cuoc
 		FROM `tabChuyen Xe`
 		WHERE docstatus = 1 AND lai_xe = %(d)s
 		  AND (trang_thai = 'Đang giao' OR (trang_thai = 'Hoàn thành' AND ngay_giao = %(t)s))

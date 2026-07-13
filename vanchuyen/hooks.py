@@ -38,6 +38,8 @@ fixtures = [
                     "Sales Invoice-custom_chuyen_xe_link",
                     "Driver-custom_login_token",
                     "Driver-custom_is_to_truong",
+                    "Sales Invoice-custom_gửi_xe",
+                    "Vehicle-custom_phu_phi_xe",
                 ],
             ]
         ],

@@ -2,7 +2,7 @@
 // Client chỉ kiểm cho mượt tay — validate server là sự thật (hiện message throw nguyên văn).
 import { call, errText } from "../lib/api.js";
 import { skeleton } from "../lib/dom.js";
-import { escapeHtml, formatQty, formatM3, formatDate } from "../lib/format.js";
+import { escapeHtml, formatQty, formatM3, formatDate, formatCurrency } from "../lib/format.js";
 import { showToast } from "../components/toast.js";
 import { showModal, closeModal } from "../components/modal.js";
 import { confirmDialog } from "../components/confirm.js";
@@ -210,6 +210,7 @@ function mkRow(o, so_kien, the_tich) {
 		con_lai: Number(o.con_lai) || 0,
 		so_kien: Number(so_kien) || 0,
 		the_tich: Number(the_tich) || 0,
+		gui_xe: o.gui_xe ? 1 : 0,
 	};
 }
 
@@ -344,6 +345,12 @@ function drawBuilder() {
 			drawBuilder();
 		})
 	);
+	wrap.querySelectorAll("[data-guixe]").forEach((cb) =>
+		cb.addEventListener("change", () => {
+			const row = b.rows.find((r) => r.sales_invoice === cb.dataset.guixe);
+			if (row) row.gui_xe = cb.checked ? 1 : 0;
+		})
+	);
 	document.getElementById("vc-b-clear").addEventListener("click", () => {
 		S.builder = { name: null, ngay_giao: todayStr(), lai_xe: "", xe: "", rows: [] };
 		drawBuilder();
@@ -388,6 +395,9 @@ function builderRow(r) {
 		<div style="flex:1;min-width:0">
 			<div class="vc-font-bold vc-text-sm" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.khach_hang || r.sales_invoice)}</div>
 			<div class="vc-text-muted vc-text-sm">${escapeHtml(r.sales_invoice)} · ${formatM3(r.the_tich)} m³</div>
+			<label class="vc-flex vc-items-center vc-gap-1 vc-text-sm" style="margin-top:.2rem;cursor:pointer;color:var(--vc-primary,#6366f1);font-weight:600">
+				<input type="checkbox" data-guixe="${escapeHtml(r.sales_invoice)}" ${r.gui_xe ? "checked" : ""} style="width:16px;height:16px" /> 🚏 Gửi xe
+			</label>
 		</div>
 		<input class="vc-input" style="width:80px" type="number" min="0.01" step="0.01" value="${r.so_kien}" data-kien="${escapeHtml(r.sales_invoice)}" aria-label="Số kiện" />
 		<button class="vc-icon-btn" data-remove="${escapeHtml(r.sales_invoice)}" aria-label="Bỏ"><i class="fas fa-times"></i></button>
@@ -401,7 +411,7 @@ function builderPayload() {
 		ngay_giao: b.ngay_giao,
 		lai_xe: b.lai_xe,
 		xe: b.xe,
-		don_hang: b.rows.map((r) => ({ sales_invoice: r.sales_invoice, so_kien: r.so_kien, the_tich: r.the_tich })),
+		don_hang: b.rows.map((r) => ({ sales_invoice: r.sales_invoice, so_kien: r.so_kien, the_tich: r.the_tich, gui_xe: r.gui_xe ? 1 : 0 })),
 	};
 }
 
@@ -516,6 +526,7 @@ function tripCard(t) {
 			<span class="vc-chip">${formatQty(t.tong_kien)} kiện</span>
 			<span class="vc-chip">${formatM3(t.tong_the_tich)} m³ (${Math.round(Number(t.ti_le_tai) || 0)}%)</span>
 			${t.docstatus === 1 ? `<span class="vc-chip">${t.stops_giao}/${t.stops_total} điểm</span>` : ""}
+			${Number(t.tong_cuoc) > 0 ? `<span class="vc-chip vc-chip-accent">💵 ${formatCurrency(t.tong_cuoc)}</span>` : ""}
 		</div>
 		<div class="vc-flex vc-gap-2 vc-mt-2" style="flex-wrap:wrap">${actions}</div>
 	</div>`;
@@ -576,6 +587,7 @@ async function editDraft(name) {
 				con_lai: Number(s.con_lai) || Number(s.so_kien) || 0,
 				so_kien: s.so_kien,
 				the_tich: s.the_tich,
+				gui_xe: s.gui_xe ? 1 : 0,
 			})),
 		};
 		drawBuilder();

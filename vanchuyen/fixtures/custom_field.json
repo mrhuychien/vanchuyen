@@ -128,5 +128,28 @@
   "description": "Tổ trưởng: được xếp chuyến + tạo/cấp tài khoản lái xe (không phụ thuộc role Frappe)",
   "insert_after": "custom_login_token",
   "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-custom_gửi_xe",
+  "dt": "Sales Invoice",
+  "fieldname": "custom_gửi_xe",
+  "label": "Gửi xe (bến)",
+  "fieldtype": "Check",
+  "allow_on_submit": 1,
+  "description": "Đơn ở xa phải gửi xe ở bến — cộng phụ phí vào cước chuyến của lái xe",
+  "insert_after": "custom_xe",
+  "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Vehicle-custom_phu_phi_xe",
+  "dt": "Vehicle",
+  "fieldname": "custom_phu_phi_xe",
+  "label": "Phụ phí xe (đ)",
+  "fieldtype": "Currency",
+  "description": "Phụ phí cố định cộng vào mỗi chuyến của xe này (VD xe 2797 +100.000)",
+  "insert_after": "custom_the_tich_kha_dung",
+  "module": "Van Chuyen"
  }
 ]

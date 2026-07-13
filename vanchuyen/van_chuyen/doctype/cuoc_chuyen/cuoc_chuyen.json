@@ -1,0 +1,64 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:dia_diem",
+ "creation": "2026-01-01 00:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "dia_diem",
+  "gia",
+  "active"
+ ],
+ "fields": [
+  {
+   "fieldname": "dia_diem",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Địa điểm (khớp Tỉnh trên đơn)",
+   "reqd": 1,
+   "unique": 1,
+   "description": "Tên địa điểm/tỉnh — phải khớp giá trị trường Tỉnh (custom_tỉnh) trên Sales Invoice"
+  },
+  {
+   "fieldname": "gia",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Đơn giá cước (đ)",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "active",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Đang áp dụng"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-01-01 00:00:00",
+ "module": "Van Chuyen",
+ "name": "Cuoc Chuyen",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "dia_diem",
+ "sort_order": "ASC",
+ "states": [],
+ "track_changes": 0
+}

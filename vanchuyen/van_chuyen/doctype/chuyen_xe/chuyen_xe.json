@@ -25,6 +25,14 @@
   "col_break_tong",
   "tong_the_tich",
   "ti_le_tai",
+  "sec_cuoc",
+  "cuoc_goc",
+  "phu_phi_gui_xe",
+  "phu_phi_nhieu_diem",
+  "col_break_cuoc",
+  "phu_phi_chuyen_2",
+  "phu_phi_xe",
+  "tong_cuoc",
   "sec_ghi_chu",
   "ghi_chu"
  ],
@@ -157,6 +165,58 @@
    "fieldtype": "Percent",
    "label": "Tỉ lệ tải (%)",
    "read_only": 1
+  },
+  {
+   "fieldname": "sec_cuoc",
+   "fieldtype": "Section Break",
+   "label": "Cước chuyến"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "cuoc_goc",
+   "fieldtype": "Currency",
+   "label": "Cước gốc (điểm xa nhất)",
+   "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "phu_phi_gui_xe",
+   "fieldtype": "Currency",
+   "label": "Phụ phí gửi xe",
+   "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "phu_phi_nhieu_diem",
+   "fieldtype": "Currency",
+   "label": "Phụ phí nhiều điểm (>4)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_cuoc",
+   "fieldtype": "Column Break"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "phu_phi_chuyen_2",
+   "fieldtype": "Currency",
+   "label": "Phụ phí chuyến thứ 2+",
+   "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "phu_phi_xe",
+   "fieldtype": "Currency",
+   "label": "Phụ phí xe",
+   "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "tong_cuoc",
+   "fieldtype": "Currency",
+   "label": "TỔNG CƯỚC CHUYẾN",
+   "read_only": 1,
+   "bold": 1
   },
   {
    "fieldname": "sec_ghi_chu",

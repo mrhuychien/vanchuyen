@@ -1,7 +1,7 @@
 // #/chuyen — Lái Xe: danh sách chuyến của tôi (mobile-first). Không có số tiền.
 import { call, errText } from "../lib/api.js";
 import { skeleton } from "../lib/dom.js";
-import { escapeHtml, formatDate } from "../lib/format.js";
+import { escapeHtml, formatDate, formatCurrency } from "../lib/format.js";
 
 export async function render({ container }) {
 	container.innerHTML = skeleton(90, 3);
@@ -43,6 +43,7 @@ function card(t) {
 			</div>
 			<div class="vc-order-meta">
 				<span class="vc-chip"><i class="fas fa-map-marker-alt"></i> ${t.stops_giao}/${t.stops_total} điểm đã giao</span>
+				${Number(t.tong_cuoc) > 0 ? `<span class="vc-chip vc-chip-accent">💵 ${formatCurrency(t.tong_cuoc)}</span>` : ""}
 				<i class="fas fa-chevron-right vc-text-muted" style="margin-left:auto"></i>
 			</div>
 		</a>`;

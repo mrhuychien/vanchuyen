@@ -12,9 +12,37 @@ LAI_XE = "Lái Xe"
 CHUYEN_XE_PERMS = ("read", "write", "create", "submit", "cancel", "amend", "print")
 
 
+# Bảng giá cước mặc định theo ảnh (địa điểm → đơn giá). Điều phối sửa/thêm trên Desk sau.
+# 'dia_diem' khớp giá trị trường Tỉnh (custom_tỉnh) trên đơn để tra cước gốc.
+DEFAULT_RATES = {
+	300000: ["Thái Bình", "Nam Định", "Bắc Ninh", "Bắc Giang", "Đông Anh", "Hải Phòng", "Hà Nội"],
+	400000: ["Ninh Bình", "Bỉm Sơn", "Sơn Tây", "Hòa Bình", "Thái Nguyên", "Vĩnh Phúc", "Uông Bí", "Hạ Long"],
+	500000: ["Thanh Hóa", "Phú Thọ", "Cẩm Phả", "Lạng Sơn"],
+	600000: ["Diễn Châu", "Thái Hòa", "Yên Bái", "Tuyên Quang"],
+	700000: ["Vinh", "Lào Cai"],
+	800000: ["Hà Tĩnh"],
+}
+
+
+def seed_cuoc_chuyen():
+	"""Seed bảng giá cước mặc định (chỉ thêm địa điểm CHƯA có → không đè giá điều phối đã sửa)."""
+	if not frappe.db.table_exists("Cuoc Chuyen"):
+		return
+	for gia, dia_diems in DEFAULT_RATES.items():
+		for dd in dia_diems:
+			if not frappe.db.exists("Cuoc Chuyen", dd):
+				try:
+					frappe.get_doc(
+						{"doctype": "Cuoc Chuyen", "dia_diem": dd, "gia": gia, "active": 1}
+					).insert(ignore_permissions=True)
+				except Exception:
+					frappe.log_error(frappe.get_traceback(), f"vanchuyen seed Cuoc Chuyen {dd}")
+
+
 def after_install():
 	_ensure_roles()
 	_grant_dieu_phoi()
+	seed_cuoc_chuyen()
 	frappe.db.commit()
 
 

@@ -58,6 +58,7 @@ def get_pool(tu_ngay=None, den_ngay=None, tinh=None, tim=None, page=1, page_size
 		       si.`custom_tỉnh` AS tinh, si.`custom_po_` AS po,
 		       si.`custom_tổng_kiện` AS tong_kien, si.`custom_hộp_lẻ` AS hop_le,
 		       si.`custom_thể_tích_lô` AS the_tich_lo_cm3,
+		       COALESCE(si.`custom_gửi_xe`, 0) AS gui_xe,
 		       si.`custom_ghi_chú_npp` AS ghi_chu_npp,
 		       si.`custom_ghi_chú_giao_hàng` AS ghi_chu_giao
 		FROM `tabSales Invoice` si
@@ -88,6 +89,7 @@ def get_pool(tu_ngay=None, den_ngay=None, tinh=None, tim=None, page=1, page_size
 				"da_xep": xep,
 				"con_lai": con,
 				"the_tich_con_lai": (the_tich_lo * con / tong) if tong > 0 else 0.0,
+				"gui_xe": cint(r.gui_xe),
 				"ghi_chu_npp": r.ghi_chu_npp,
 				"ghi_chu_giao": r.ghi_chu_giao,
 				"posting_date": str(r.posting_date) if r.posting_date else None,
@@ -138,7 +140,7 @@ def get_trips(trang_thai=None, tu_ngay=None, den_ngay=None):
 		fields=[
 			"name", "ngay_giao", "trang_thai", "docstatus", "lai_xe", "ten_lai_xe",
 			"sdt_lai_xe", "xe", "the_tich_xe", "tong_don", "tong_kien", "tong_the_tich",
-			"ti_le_tai", "ghi_chu",
+			"ti_le_tai", "tong_cuoc", "ghi_chu",
 		],
 		order_by="ngay_giao desc, creation desc",
 	)
@@ -182,6 +184,7 @@ def _trip_dict(doc):
 		# số kiện không bị zero thể tích; con_lai = trần đơn có thể xếp cho dòng này.
 		tong = flt(frappe.db.get_value("Sales Invoice", si, "custom_tổng_kiện")) if si else 0.0
 		the_tich_lo = (flt(frappe.db.get_value("Sales Invoice", si, "custom_thể_tích_lô")) / 1_000_000.0) if si else 0.0
+		gui_xe_si = cint(frappe.db.get_value("Sales Invoice", si, "custom_gửi_xe")) if si else 0
 		con_lai_row = (tong - da_xep(si, exclude_trip=doc.name)) if si else 0.0
 		stops.append(
 			{
@@ -199,6 +202,7 @@ def _trip_dict(doc):
 				"tong_kien": tong,
 				"the_tich_lo": the_tich_lo,
 				"con_lai": con_lai_row,
+				"gui_xe": gui_xe_si,
 			}
 		)
 	return {
@@ -215,6 +219,12 @@ def _trip_dict(doc):
 		"tong_kien": flt(doc.tong_kien),
 		"tong_the_tich": flt(doc.tong_the_tich),
 		"ti_le_tai": flt(doc.ti_le_tai),
+		"cuoc_goc": flt(doc.cuoc_goc),
+		"phu_phi_gui_xe": flt(doc.phu_phi_gui_xe),
+		"phu_phi_nhieu_diem": flt(doc.phu_phi_nhieu_diem),
+		"phu_phi_chuyen_2": flt(doc.phu_phi_chuyen_2),
+		"phu_phi_xe": flt(doc.phu_phi_xe),
+		"tong_cuoc": flt(doc.tong_cuoc),
 		"ghi_chu": doc.ghi_chu,
 		"stops": stops,
 	}
@@ -260,6 +270,12 @@ def save_trip(payload):
 	doc.lai_xe = payload.get("lai_xe")
 	doc.xe = payload.get("xe")
 	doc.ghi_chu = payload.get("ghi_chu")
+	# Gửi xe là thuộc tính của ĐƠN (điểm đến ở xa) → ghi custom_gửi_xe TRƯỚC khi save để
+	# _compute_cuoc() trong validate tính phụ phí đúng.
+	for r in payload.get("don_hang") or []:
+		si = r.get("sales_invoice")
+		if si and "gui_xe" in r:
+			frappe.db.set_value("Sales Invoice", si, "custom_gửi_xe", 1 if r.get("gui_xe") else 0, update_modified=False)
 	_apply_rows(doc, payload.get("don_hang"))
 	# Tổ trưởng là Website User → ignore_permissions SAU guard require_dieu_phoi (đã kiểm role).
 	doc.save(ignore_permissions=True)

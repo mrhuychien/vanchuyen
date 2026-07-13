@@ -10,11 +10,21 @@ import re
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import flt
+from frappe.utils import cint, flt
 
 # ── Hằng số ────────────────────────────────────────────────────────────────
 EPS = 0.001            # custom_tổng_kiện là Float → mọi so sánh dùng epsilon
 OVERLOAD_HARD = 1.10   # >110% thể tích khả dụng → chặn cứng; >100% → cảnh báo
+
+# Phụ phí cước chuyến (đ) — mặc định theo bảng, đổi được qua site_config.
+def _cfg_amt(key, default):
+	return flt(frappe.conf.get(key) or default)
+
+
+PHU_PHI_GUI_XE = "cuoc_gui_xe_moi_don"   # /mỗi đơn tick Gửi xe, mặc định 100k
+PHU_PHI_NHIEU_DIEM = "cuoc_nhieu_diem"   # >nguong điểm, mặc định 100k
+NGUONG_NHIEU_DIEM = "cuoc_nguong_diem"   # số điểm để tính nhiều điểm, mặc định 4
+PHU_PHI_CHUYEN_2 = "cuoc_chuyen_2"       # chuyến thứ 2+ trong ngày/lái xe, mặc định 100k
 
 # Thang bậc trạng thái vận chuyển của Sales Invoice — reconcile CHỈ tiến, không lùi.
 VC_RANK = {
@@ -200,6 +210,58 @@ class ChuyenXe(Document):
 		if heavy:
 			self._validate_pool_and_crosstrip()
 		self._compute_totals(warn_overload=heavy)
+		self._compute_cuoc()
+
+	def _compute_cuoc(self):
+		"""Tính cước chuyến cho lái xe:
+		  - cước gốc = đơn giá địa điểm XA NHẤT (max) trong chuyến (bảng Cuoc Chuyen theo Tỉnh).
+		  - phụ phí gửi xe = 100k × số ĐƠN có custom_gửi_xe.
+		  - phụ phí nhiều điểm = 100k nếu số điểm (đơn) > 4.
+		  - phụ phí chuyến 2+ = 100k nếu lái xe đã có chuyến khác cùng ngày (sớm hơn).
+		  - phụ phí xe = Vehicle.custom_phu_phi_xe.
+		Số tiền phụ phí đổi được qua site_config; bảng giá địa điểm sửa trên Desk."""
+		sis = list({r.sales_invoice for r in self.don_hang if r.sales_invoice})
+		base = 0.0
+		gui_count = 0
+		if sis:
+			rows = frappe.db.sql(
+				"""SELECT `custom_tỉnh` AS tinh, COALESCE(`custom_gửi_xe`, 0) AS gui
+				   FROM `tabSales Invoice` WHERE name IN %(n)s""",
+				{"n": sis}, as_dict=True,
+			)
+			tinhs = {r.tinh for r in rows if r.tinh}
+			rate_map = {}
+			if tinhs:
+				for c in frappe.get_all(
+					"Cuoc Chuyen", filters={"dia_diem": ["in", list(tinhs)], "active": 1},
+					fields=["dia_diem", "gia"],
+				):
+					rate_map[c.dia_diem] = flt(c.gia)
+			base = max((rate_map.get(r.tinh, 0.0) for r in rows), default=0.0)
+			gui_count = sum(1 for r in rows if cint(r.gui))
+
+		diem = len(sis)
+		self.cuoc_goc = base
+		self.phu_phi_gui_xe = gui_count * _cfg_amt(PHU_PHI_GUI_XE, 100000)
+		self.phu_phi_nhieu_diem = (
+			_cfg_amt(PHU_PHI_NHIEU_DIEM, 100000) if diem > cint(_cfg_amt(NGUONG_NHIEU_DIEM, 4)) else 0.0
+		)
+
+		# Chuyến thứ 2+ trong ngày của lái xe (có chuyến khác SỚM HƠN cùng ngày).
+		self.phu_phi_chuyen_2 = 0.0
+		if self.lai_xe and self.ngay_giao:
+			ref = self.creation or frappe.utils.now()
+			earlier = frappe.db.sql(
+				"""SELECT COUNT(*) FROM `tabChuyen Xe`
+				   WHERE lai_xe = %(lx)s AND ngay_giao = %(ng)s AND docstatus < 2
+				     AND name != %(nm)s AND creation < %(ref)s""",
+				{"lx": self.lai_xe, "ng": self.ngay_giao, "nm": self.name or "", "ref": ref},
+			)[0][0]
+			if cint(earlier) >= 1:
+				self.phu_phi_chuyen_2 = _cfg_amt(PHU_PHI_CHUYEN_2, 100000)
+
+		self.phu_phi_xe = flt(frappe.db.get_value("Vehicle", self.xe, "custom_phu_phi_xe")) if self.xe else 0.0
+		self.tong_cuoc = flt(self.cuoc_goc) + flt(self.phu_phi_gui_xe) + flt(self.phu_phi_nhieu_diem) + flt(self.phu_phi_chuyen_2) + flt(self.phu_phi_xe)
 
 	def _needs_heavy_validation(self):
 		if self.docstatus == 0:
