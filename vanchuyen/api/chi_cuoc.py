@@ -45,6 +45,61 @@ def _accounts():
 	}
 
 
+# ── Chi tiền thủ công (giống trang quỹ dầu) ──────────────────────────────────
+@frappe.whitelist()
+def get_fund_summary():
+	"""Số dư quỹ tạm ứng (141 + party) = SUM(debit - credit) trên GL Entry."""
+	_require_view()
+	acc = _accounts()
+	bal = frappe.db.sql(
+		"""SELECT COALESCE(SUM(debit - credit), 0) FROM `tabGL Entry`
+		   WHERE account = %(a)s AND party = %(p)s AND is_cancelled = 0""",
+		{"a": acc["credit"], "p": acc["party"]},
+	)[0][0]
+	return {"balance": flt(bal), "account": acc["credit"], "party": acc["party"]}
+
+
+@frappe.whitelist()
+def get_pay_drivers():
+	"""Danh sách lái xe + TK ngân hàng cho chọn nhanh khi chi thủ công."""
+	_require_view()
+	out = []
+	for d in frappe.get_all(
+		"Driver",
+		fields=["name", "full_name", "cell_number", "custom_nganhang", "custom_stk", "custom_tentk"],
+		order_by="full_name asc",
+	):
+		out.append(
+			{
+				"name": d.name,
+				"full_name": d.full_name or d.name,
+				"phone": d.cell_number or "",
+				"bank": {
+					"nganhang": d.custom_nganhang or "",
+					"stk": d.custom_stk or "",
+					"tentk": d.custom_tentk or d.full_name or "",
+				},
+			}
+		)
+	return out
+
+
+@frappe.whitelist()
+def create_manual_je(posting_date, amount, content, debit_account, submit=1):
+	"""Chi tiền thủ công: Nợ [TK chi phí chọn] / Có 141 (party). Không gắn chuyến nào."""
+	_require_pay()
+	amount = flt(amount)
+	content = (content or "").strip()
+	if amount <= 0:
+		frappe.throw(_("Nhập số tiền > 0."))
+	if not content:
+		frappe.throw(_("Nhập nội dung chi."))
+	if not frappe.db.exists("Account", debit_account):
+		frappe.throw(_("Tài khoản chi phí '{0}' không tồn tại.").format(debit_account))
+	je = _make_je(posting_date, [{"amount": amount, "remark": content}], content, submit, debit_account=debit_account)
+	return {"journal_entry": je}
+
+
 # ── Lịch: tổng cước theo ngày ────────────────────────────────────────────────
 @frappe.whitelist()
 def get_pay_calendar(nam, thang):
@@ -156,13 +211,14 @@ def set_trip_cuoc(name, amount):
 
 
 # ── Tạo Journal Entry ────────────────────────────────────────────────────────
-def _make_je(posting_date, lines, remark, submit=True):
-	"""lines = [{trip, amount, remark}]. Nợ 6412 mỗi dòng + Có 141 tổng (party Employee)."""
+def _make_je(posting_date, lines, remark, submit=True, debit_account=None):
+	"""lines = [{trip, amount, remark}]. Nợ [debit_account|6412] mỗi dòng + Có 141 tổng (party)."""
 	acc = _accounts()
 	if not acc["party"]:
 		frappe.throw(
 			_("Chưa cấu hình nhân viên giữ quỹ (cuoc_credit_party trong site_config) — bút toán 141 cần party.")
 		)
+	debit = debit_account or acc["debit"]
 	total = sum(flt(l["amount"]) for l in lines)
 	if total <= 0:
 		frappe.throw(_("Tổng cước phải > 0."))
@@ -171,7 +227,7 @@ def _make_je(posting_date, lines, remark, submit=True):
 	for l in lines:
 		je_accounts.append(
 			{
-				"account": acc["debit"],
+				"account": debit,
 				"debit_in_account_currency": flt(l["amount"]),
 				"credit_in_account_currency": 0,
 				"user_remark": l.get("remark"),

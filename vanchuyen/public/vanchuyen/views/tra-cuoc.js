@@ -4,7 +4,7 @@ import { call, errText } from "../lib/api.js";
 import { skeleton } from "../lib/dom.js";
 import { escapeHtml, formatCurrency, formatDate } from "../lib/format.js";
 import { showToast } from "../components/toast.js";
-import { showModal } from "../components/modal.js";
+import { showModal, closeModal } from "../components/modal.js";
 import { confirmDialog } from "../components/confirm.js";
 
 // BIN VietQR các ngân hàng phổ biến (map tên/alias → mã). Tự nhận diện không phân biệt
@@ -93,9 +93,19 @@ function vietQrUrl(bank, amount, content) {
 
 const WEEKDAYS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
 const pad = (n) => String(n).padStart(2, "0");
+const todayStr = () => new Date().toISOString().split("T")[0];
+
+// TK chi phí cho chi thủ công (khớp trang quỹ dầu mẫu). Đổi được nếu CoA khác.
+const EXPENSE_ACCOUNTS = [
+	["6412 - Chi phí bán hàng GT - HGC", "6412 — CP bán hàng GT (vận chuyển)"],
+	["6411 - Chi phí bán hàng MT - HGC", "6411 — CP bán hàng MT"],
+	["642 - Chi phí quản lý - HGC", "642 — CP quản lý"],
+	["1111 - Tiền mặt - HGC", "1111 — Tiền mặt (hoàn quỹ)"],
+];
+const AMOUNT_CHIPS = [100000, 200000, 500000, 1000000, 2000000, 5000000];
 
 let ROOT = null;
-const S = { nam: 0, thang: 0, selected: null, cal: {}, trips: [], dayFilter: "all" };
+const S = { nam: 0, thang: 0, selected: null, cal: {}, trips: [], dayFilter: "all", drivers: [] };
 
 const CSS = `
 .tc-cal { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
@@ -142,10 +152,22 @@ export async function render({ container }) {
 		<div class="vc-view-banner">
 			<div>
 				<div class="vc-view-banner-title">Chi trả tiền cước</div>
-				<div class="vc-view-banner-subtitle">Chọn ngày trên lịch để xem chuyến & trả cước lái xe</div>
+				<div class="vc-view-banner-subtitle">Chi tiền thủ công hoặc trả cước theo chuyến</div>
 			</div>
 			<div class="vc-view-banner-badge"><i class="fas fa-money-bill-wave"></i></div>
 		</div>
+
+		<div class="vc-card vc-mb-3">
+			<div class="vc-flex" style="justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap">
+				<div>
+					<div class="vc-text-sm vc-text-muted">Số dư quỹ tạm ứng (141)</div>
+					<div style="font-size:1.5rem;font-weight:800" id="tc-balance">…</div>
+				</div>
+				<button class="vc-btn-danger" id="tc-open-manual"><i class="fas fa-minus-circle"></i> Chi tiền thủ công</button>
+			</div>
+		</div>
+
+		<div class="vc-section-title">📅 Trả cước theo chuyến</div>
 		<div class="vc-card vc-mb-3">
 			<div class="tc-cal-head">
 				<button class="tc-nav" id="tc-prev"><i class="fas fa-chevron-left"></i></button>
@@ -157,7 +179,128 @@ export async function render({ container }) {
 		<div id="tc-day"></div>`;
 	document.getElementById("tc-prev").addEventListener("click", () => shiftMonth(-1));
 	document.getElementById("tc-next").addEventListener("click", () => shiftMonth(1));
+	document.getElementById("tc-open-manual").addEventListener("click", openManualModal);
+	loadFund();
+	loadDrivers();
 	await loadCalendar();
+}
+
+async function loadFund() {
+	try {
+		const r = await call("vanchuyen.api.chi_cuoc.get_fund_summary");
+		const el = document.getElementById("tc-balance");
+		if (el) el.textContent = formatCurrency(r.balance);
+	} catch (e) {
+		const el = document.getElementById("tc-balance");
+		if (el) el.textContent = "—";
+	}
+}
+
+async function loadDrivers() {
+	try {
+		S.drivers = await call("vanchuyen.api.chi_cuoc.get_pay_drivers");
+	} catch (e) {
+		S.drivers = [];
+	}
+}
+
+// ── Chi tiền thủ công (modal giống trang quỹ dầu) ────────────────────────────
+function openManualModal() {
+	const accOpts = EXPENSE_ACCOUNTS.map(([v, l]) => `<option value="${escapeHtml(v)}">${escapeHtml(l)}</option>`).join("");
+	const bankOpts = BANKS.map(([, name]) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("");
+	const drvOpts = S.drivers
+		.map((d) => {
+			const hasBank = d.bank && d.bank.stk;
+			return `<option value="${escapeHtml(d.name)}" ${hasBank ? "" : "disabled"}>${escapeHtml(d.full_name)}${d.phone ? " (" + escapeHtml(d.phone) + ")" : ""}${hasBank ? "" : " ⚠ chưa có TK"}</option>`;
+		})
+		.join("");
+	const chips = AMOUNT_CHIPS.map((a) => `<button type="button" class="tc-pill" data-add="${a}">+${kFmt(a)}</button>`).join("");
+	const body = `
+		<div class="vc-field"><label>Ngày chi *</label><input class="vc-input" type="date" id="tm-date" value="${escapeHtml(S.selected || todayStr())}"></div>
+		<div class="vc-field"><label>Số tiền (đ) *</label><input class="vc-input" type="number" min="0" step="1000" id="tm-amount" placeholder="0"></div>
+		<div class="tc-pills">${chips}<button type="button" class="tc-pill" data-add="clear">Xóa</button></div>
+		<div class="vc-field"><label>Nội dung *</label><textarea class="vc-input" id="tm-content" style="min-height:56px" placeholder="VD: Đổ dầu xe 29C-12345..."></textarea></div>
+		<div class="vc-field"><label>TK chi phí (Nợ) *</label><select class="vc-input" id="tm-account">${accOpts}</select></div>
+		<div class="vc-field"><label>⚡ Chọn nhanh lái xe (điền TK để QR)</label><select class="vc-input" id="tm-driver"><option value="">— Nhập TK thủ công —</option>${drvOpts}</select></div>
+		<div class="vc-flex vc-gap-2" style="flex-wrap:wrap">
+			<div class="vc-field" style="flex:1;min-width:140px"><label>Ngân hàng</label><select class="vc-input" id="tm-bank"><option value="">— Chọn NH —</option>${bankOpts}</select></div>
+			<div class="vc-field" style="flex:1;min-width:140px"><label>Số TK</label><input class="vc-input" id="tm-stk" placeholder="Số tài khoản"></div>
+		</div>
+		<div class="vc-field"><label>Tên chủ TK</label><input class="vc-input" id="tm-tentk" placeholder="NGUYEN VAN A" style="text-transform:uppercase"></div>
+		<div id="tm-qr" style="text-align:center;margin-top:.6rem"></div>`;
+	const footer = `<button class="vc-btn-ghost" data-vc-close>Hủy</button>
+		<button class="vc-btn-success" id="tm-save"><i class="fas fa-check"></i> Tạo bút toán</button>`;
+	const content = showModal({ title: "💸 Chi tiền thủ công", body, footer });
+	if (!content) return;
+
+	const q = (id) => content.querySelector("#" + id);
+	const updateQr = () => {
+		const amount = Number(q("tm-amount").value) || 0;
+		const bank = { nganhang: q("tm-bank").value, stk: q("tm-stk").value.trim(), tentk: q("tm-tentk").value.trim() };
+		const box = q("tm-qr");
+		const url = bank.stk && bank.stk.length >= 4 && amount > 0 ? vietQrUrl(bank, amount, q("tm-content").value.trim() || "Thanh toan") : "";
+		box.innerHTML = url
+			? `<img src="${escapeHtml(url)}" alt="QR" style="width:200px;height:200px;background:#fff;border-radius:10px;padding:6px" /><div class="vc-text-sm vc-text-muted vc-mt-1">Quét QR để chuyển khoản</div>`
+			: "";
+	};
+	content.querySelectorAll("[data-add]").forEach((b) =>
+		b.addEventListener("click", () => {
+			const inp = q("tm-amount");
+			if (b.dataset.add === "clear") inp.value = "";
+			else inp.value = (Number(inp.value) || 0) + Number(b.dataset.add);
+			updateQr();
+		})
+	);
+	q("tm-driver").addEventListener("change", (e) => {
+		const d = S.drivers.find((x) => x.name === e.target.value);
+		if (d && d.bank && d.bank.stk) {
+			const bankSel = q("tm-bank");
+			const bn = d.bank.nganhang || "";
+			// Tên NH trong hồ sơ có thể không trùng option chuẩn → thêm option để chọn được + sinh QR.
+			if (bn && ![...bankSel.options].some((o) => o.value === bn)) {
+				const o = document.createElement("option");
+				o.value = bn;
+				o.textContent = bn + " (hồ sơ)";
+				bankSel.appendChild(o);
+			}
+			bankSel.value = bn;
+			q("tm-stk").value = d.bank.stk;
+			q("tm-tentk").value = (d.bank.tentk || "").toUpperCase();
+			if (!q("tm-content").value.trim()) q("tm-content").value = `Chi cho ${d.full_name}`;
+		}
+		updateQr();
+	});
+	["tm-amount", "tm-bank", "tm-stk", "tm-tentk", "tm-content"].forEach((id) =>
+		q(id).addEventListener("input", updateQr)
+	);
+	q("tm-bank").addEventListener("change", updateQr);
+	q("tm-save").addEventListener("click", async () => {
+		const btn = q("tm-save");
+		const args = {
+			posting_date: q("tm-date").value,
+			amount: Number(q("tm-amount").value) || 0,
+			content: q("tm-content").value.trim(),
+			debit_account: q("tm-account").value,
+		};
+		if (!args.posting_date || args.amount <= 0 || !args.content) {
+			showToast("Nhập đủ ngày, số tiền, nội dung", "warning");
+			return;
+		}
+		btn.disabled = true;
+		btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang tạo...';
+		try {
+			const r = await call("vanchuyen.api.chi_cuoc.create_manual_je", args);
+			showToast(`Đã tạo bút toán ${r.journal_entry}`, "success");
+			closeModal();
+			loadFund();
+			await loadCalendar();
+			if (S.selected) await loadDay();
+		} catch (e) {
+			btn.disabled = false;
+			btn.innerHTML = '<i class="fas fa-check"></i> Tạo bút toán';
+			showToast(errText(e), "error");
+		}
+	});
 }
 
 function shiftMonth(delta) {
