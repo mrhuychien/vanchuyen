@@ -27,6 +27,9 @@ def get_pool(tu_ngay=None, den_ngay=None, tinh=None, tim=None, page=1, page_size
 		"si.is_return = 0",
 		"si.`custom_hình_thức_vận_chuyển` = 'Tự vận chuyển'",
 		"COALESCE(si.`custom_trang_thai_xep`, '') != 'Đủ'",
+		# CHỈ đơn 'Đang xử lý' (hoặc chưa set trạng thái) mới vào pool xếp chuyến.
+		# Sau khi xuất chuyến → reconcile đặt 'Đang giao hàng' → tự rời pool.
+		"COALESCE(NULLIF(si.`custom_trạng_thái_vận_chuyển`, ''), 'Đang xử lý') = 'Đang xử lý'",
 	]
 	params = {}
 	if tu_ngay:
