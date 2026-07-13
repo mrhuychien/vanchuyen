@@ -261,7 +261,9 @@ class ChuyenXe(Document):
 				self.phu_phi_chuyen_2 = _cfg_amt(PHU_PHI_CHUYEN_2, 100000)
 
 		self.phu_phi_xe = flt(frappe.db.get_value("Vehicle", self.xe, "custom_phu_phi_xe")) if self.xe else 0.0
-		self.tong_cuoc = flt(self.cuoc_goc) + flt(self.phu_phi_gui_xe) + flt(self.phu_phi_nhieu_diem) + flt(self.phu_phi_chuyen_2) + flt(self.phu_phi_xe)
+		# Nếu điều phối đã SỬA TAY tổng cước (cuoc_thu_cong) → giữ nguyên, không ghi đè.
+		if not cint(self.get("cuoc_thu_cong")):
+			self.tong_cuoc = flt(self.cuoc_goc) + flt(self.phu_phi_gui_xe) + flt(self.phu_phi_nhieu_diem) + flt(self.phu_phi_chuyen_2) + flt(self.phu_phi_xe)
 
 	def _needs_heavy_validation(self):
 		if self.docstatus == 0:

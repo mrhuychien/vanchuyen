@@ -33,6 +33,9 @@
   "phu_phi_chuyen_2",
   "phu_phi_xe",
   "tong_cuoc",
+  "cuoc_thu_cong",
+  "da_tra_cuoc",
+  "cuoc_je",
   "sec_ghi_chu",
   "ghi_chu"
  ],
@@ -217,6 +220,30 @@
    "label": "TỔNG CƯỚC CHUYẾN",
    "read_only": 1,
    "bold": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "default": "0",
+   "fieldname": "cuoc_thu_cong",
+   "fieldtype": "Check",
+   "label": "Cước sửa tay (khoá tự tính)",
+   "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "default": "0",
+   "fieldname": "da_tra_cuoc",
+   "fieldtype": "Check",
+   "label": "Đã trả cước",
+   "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "cuoc_je",
+   "fieldtype": "Link",
+   "label": "Bút toán trả cước",
+   "options": "Journal Entry",
+   "read_only": 1
   },
   {
    "fieldname": "sec_ghi_chu",
