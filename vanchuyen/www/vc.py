@@ -12,31 +12,34 @@ def get_context(context):
 	# Đăng nhập QR: /vc?k=<token> → tìm Driver theo token → login_as (không cần mật khẩu).
 	# Token 40 ký tự ngẫu nhiên; tài khoản khoá (enabled=0) thì bỏ qua.
 	# KHÔNG redirect sau login_as (Set-Cookie không sống sót qua Redirect → mất đăng nhập).
-	# Nhận diện quyền dưới đây đọc Driver bằng frappe.session.user (đã = user vừa login_as),
-	# là DB read tươi nên đúng ngay trong request này, không cần reload.
-	if frappe.session.user == "Guest":
+	# Bám theo `user` cục bộ: sau login_as, frappe.session.user có thể CHƯA cập nhật ngay
+	# trong request này → nếu đọc lại sẽ thấy Guest và bị bật về /login. Cookie phiên vẫn được
+	# login_as ghi vào response nên các request sau (API của SPA) đã xác thực bình thường.
+	user = frappe.session.user
+	if user == "Guest":
 		token = frappe.form_dict.get("k")
 		if token:
 			drv = frappe.db.get_value("Driver", {"custom_login_token": token}, ["custom_user"], as_dict=True)
 			if drv and drv.custom_user and frappe.db.get_value("User", drv.custom_user, "enabled"):
 				frappe.local.login_manager.login_as(drv.custom_user)
+				user = drv.custom_user
 
-	if frappe.session.user == "Guest":
+	if user == "Guest":
 		frappe.local.flags.redirect_location = "/login?redirect-to=/vc"
 		raise frappe.Redirect
 
-	roles = set(frappe.get_roles(frappe.session.user))
+	roles = set(frappe.get_roles(user))
 	# Lái xe / tổ trưởng dùng tài khoản Website User; một số cấu hình Frappe không giữ role
 	# tuỳ biến trên Website User → nhận diện QUA Driver link (nguồn tin cậy) thay vì chỉ role.
 	drv = frappe.db.get_value(
-		"Driver", {"custom_user": frappe.session.user}, ["name", "custom_is_to_truong"], as_dict=True
+		"Driver", {"custom_user": user}, ["name", "custom_is_to_truong"], as_dict=True
 	)
 	driver_name = drv.name if drv else None
 	is_dieu_phoi = "Điều Phối Vận Chuyển" in roles or bool(drv and drv.custom_is_to_truong)
 	is_lai_xe = "Lái Xe" in roles or bool(drv)
 	# Điều hành = admin logistics đã có quyền Sales Invoice (view Phase 2).
-	is_dieu_hanh = bool(frappe.has_permission("Sales Invoice", "write"))
-	is_admin = frappe.session.user == "Administrator" or "System Manager" in roles
+	is_dieu_hanh = bool(frappe.has_permission("Sales Invoice", "write", user=user))
+	is_admin = user == "Administrator" or "System Manager" in roles
 
 	try:
 		csrf = frappe.sessions.get_csrf_token()
@@ -44,8 +47,8 @@ def get_context(context):
 		csrf = ""
 
 	context.vc_context = {
-		"user": frappe.session.user,
-		"full_name": frappe.utils.get_fullname(frappe.session.user),
+		"user": user,
+		"full_name": frappe.utils.get_fullname(user),
 		"is_dieu_phoi": is_dieu_phoi,
 		"is_lai_xe": is_lai_xe,
 		"is_dieu_hanh": is_dieu_hanh,
