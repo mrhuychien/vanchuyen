@@ -242,10 +242,16 @@ const CSS_TEXT = `
   .rvhg-bottom-pagination button { padding:10px 16px; font-size:13px; }
   .rvhg-page-numbers { display:none; }
   .rvhg-po-search-input { width:100%; }
-  .rvhg-selection-bar { gap:6px; padding:8px 10px; }
-  .rvhg-selection-count { font-size:.8rem; padding-right:8px; }
-  .rvhg-sel-btn { font-size:.7rem; padding:5px 8px; }
+  .rvhg-selection-bar { gap:8px; padding:10px 12px; flex-wrap:wrap; }
+  .rvhg-selection-count { font-size:.8rem; padding-right:0; border-right:none; flex:1 1 auto; }
+  .rvhg-selection-clear { flex:0 0 auto; margin-left:auto; }
+  .rvhg-selection-bar-actions { order:3; width:100%; gap:8px; }
+  .rvhg-sel-btn { flex:1 1 0; min-width:0; justify-content:center; font-size:.78rem; padding:9px 6px; }
   .rvhg-keyboard-hint { display:none; }
+  .rvhg-invoice-item { padding:8px 10px; }
+  .rvhg-invoice-stats { gap:10px; }
+  .rvhg-stat-item { min-width:38px; }
+  .rvhg-invoice-meta-address { font-size:.75rem; }
 }
 `;
 
@@ -305,9 +311,9 @@ const MARKUP = `
     <div class="rvhg-selection-bar" id="rvhg-selection-bar">
       <div class="rvhg-selection-count"><span class="rvhg-selection-count-num" id="rvhg-sel-count">0</span><span id="rvhg-sel-count-text">đơn đã chọn</span></div>
       <div class="rvhg-selection-bar-actions">
-        <button class="rvhg-sel-btn rvhg-primary-action" id="rvhg-sel-assign" type="button">🚛 Phân công vận chuyển</button>
-        <button class="rvhg-sel-btn" id="rvhg-sel-status" type="button">📋 Cập nhật trạng thái</button>
-        <button class="rvhg-sel-btn" id="rvhg-sel-export" type="button">📥 Xuất Excel</button>
+        <button class="rvhg-sel-btn rvhg-primary-action" id="rvhg-sel-assign" type="button">🚛 Phân công</button>
+        <button class="rvhg-sel-btn" id="rvhg-sel-status" type="button">📋 Trạng thái</button>
+        <button class="rvhg-sel-btn" id="rvhg-sel-export" type="button">📥 Excel</button>
       </div>
       <button class="rvhg-selection-clear" id="rvhg-sel-clear" type="button" title="Bỏ chọn (Esc)">✕ Bỏ chọn</button>
     </div>
@@ -466,6 +472,17 @@ function getYesterdayDate() { const y = new Date(); y.setDate(y.getDate() - 1); 
 function getDateNDaysAgo(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().split("T")[0]; }
 function formatDateToDDMMYYYY(s) { if (!s) return ""; const [y, m, d] = s.split("-"); return `${d}/${m}/${y}`; }
 function escapeHtml(str) { const div = document.createElement("div"); div.textContent = String(str || ""); return div.innerHTML; }
+// Địa chỉ giao hàng thô có <br> + dòng "None"/"null" rỗng → gộp thành 1 dòng sạch.
+function cleanAddr(addr, tinh) {
+	const parts = String(addr || "")
+		.replace(/<br\s*\/?>/gi, "\n")
+		.replace(/<[^>]+>/g, "")
+		.split(/[\n,]/)
+		.map((s) => s.trim())
+		.filter((s) => s && !/^(none|null|undefined)$/i.test(s));
+	if (tinh && tinh.trim() && !parts.some((p) => p.toLowerCase() === tinh.trim().toLowerCase())) parts.push(tinh.trim());
+	return parts.join(", ");
+}
 
 function showToast(message, type = "info") {
 	const c = document.getElementById("rvhg-toast");
@@ -1170,8 +1187,7 @@ function renderManagerView() {
 						<div class="rvhg-invoice-info">
 							<div class="rvhg-invoice-id"><span>${escapeHtml(invoice.name)}</span>${typeBadge}${statusBadge}${poBadge}</div>
 							<div class="rvhg-invoice-customer">${escapeHtml(invoice.customer || "N/A")}</div>
-							<div class="rvhg-invoice-meta">${escapeHtml(invoice.shipping_address_name || "")}</div>
-							<div class="rvhg-invoice-meta-address">📍 ${escapeHtml(invoice.shipping_address || "")}, ${escapeHtml(invoice[F.tinh] || "")}</div>
+							<div class="rvhg-invoice-meta-address">📍 ${escapeHtml(cleanAddr(invoice.shipping_address, invoice[F.tinh]) || invoice.shipping_address_name || "")}</div>
 						</div>
 						<div class="rvhg-invoice-stats">
 							<div class="rvhg-stat-item"><div class="rvhg-stat-label">Ngày</div><div class="rvhg-stat-value rvhg-stat-value-date">${formatDateToDDMMYYYY(invoice.posting_date)}</div></div>
