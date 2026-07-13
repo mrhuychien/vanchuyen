@@ -11,17 +11,15 @@ def get_context(context):
 
 	# Đăng nhập QR: /vc?k=<token> → tìm Driver theo token → login_as (không cần mật khẩu).
 	# Token 40 ký tự ngẫu nhiên; tài khoản khoá (enabled=0) thì bỏ qua.
-	# SAU login_as PHẢI redirect về /vc (bỏ token) để request kế TIẾP có session xác thực
-	# đầy đủ — nếu tính role ngay trong request này, frappe.get_roles() chưa phản ánh user
-	# vừa login (role Điều Phối/Lái Xe bị bỏ sót → báo "chưa được cấp quyền vận chuyển").
+	# KHÔNG redirect sau login_as (Set-Cookie không sống sót qua Redirect → mất đăng nhập).
+	# Nhận diện quyền dưới đây đọc Driver bằng frappe.session.user (đã = user vừa login_as),
+	# là DB read tươi nên đúng ngay trong request này, không cần reload.
 	if frappe.session.user == "Guest":
 		token = frappe.form_dict.get("k")
 		if token:
 			drv = frappe.db.get_value("Driver", {"custom_login_token": token}, ["custom_user"], as_dict=True)
 			if drv and drv.custom_user and frappe.db.get_value("User", drv.custom_user, "enabled"):
 				frappe.local.login_manager.login_as(drv.custom_user)
-				frappe.local.flags.redirect_location = "/vc"
-				raise frappe.Redirect
 
 	if frappe.session.user == "Guest":
 		frappe.local.flags.redirect_location = "/login?redirect-to=/vc"
