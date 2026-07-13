@@ -8,6 +8,7 @@ import { confirmDialog } from "../components/confirm.js";
 
 let ROOT = null;
 let LIST = [];
+const IS_ADMIN = !!(window.VC_CONTEXT && window.VC_CONTEXT.is_admin);
 
 function loadQRLib() {
 	if (window.QRCode) return Promise.resolve();
@@ -36,20 +37,27 @@ export async function render({ container }) {
 
 function draw() {
 	const co = LIST.filter((d) => d.has_account);
+	const tt = LIST.filter((d) => d.is_to_truong).length;
+	const ttCheckbox = IS_ADMIN
+		? `<label class="vc-flex vc-items-center vc-gap-2 vc-mt-2" style="cursor:pointer;font-size:.88rem;font-weight:600">
+				<input type="checkbox" id="vc-nd-tt" style="width:18px;height:18px" /> ⭐ Là tổ trưởng (được xếp chuyến)
+			</label>`
+		: "";
 	ROOT.innerHTML = `
 		<div class="vc-view-banner">
 			<div>
 				<div class="vc-view-banner-title">Tài khoản lái xe</div>
-				<div class="vc-view-banner-subtitle">${co.length}/${LIST.length} lái xe đã có tài khoản</div>
+				<div class="vc-view-banner-subtitle">${co.length}/${LIST.length} có tài khoản${IS_ADMIN ? ` · ${tt} tổ trưởng` : ""}</div>
 			</div>
 			<div class="vc-view-banner-badge"><i class="fas fa-id-card"></i></div>
 		</div>
 
 		<div class="vc-card vc-mb-3">
-			<div class="vc-builder-rows-title">Thêm lái xe mới</div>
-			<div class="vc-field"><label>Họ tên lái xe</label><input class="vc-input" id="vc-nd-ten" placeholder="Nguyễn Văn A" /></div>
+			<div class="vc-builder-rows-title">${IS_ADMIN ? "Thêm lái xe / tổ trưởng" : "Thêm lái xe mới"}</div>
+			<div class="vc-field"><label>Họ tên</label><input class="vc-input" id="vc-nd-ten" placeholder="Nguyễn Văn A" /></div>
 			<div class="vc-field"><label>Số điện thoại</label><input class="vc-input" id="vc-nd-sdt" type="tel" inputmode="numeric" placeholder="09xxxxxxxx" /></div>
-			<button class="vc-btn-primary vc-btn-block" id="vc-nd-create"><i class="fas fa-user-plus"></i> Tạo tài khoản + QR</button>
+			${ttCheckbox}
+			<button class="vc-btn-primary vc-btn-block vc-mt-2" id="vc-nd-create"><i class="fas fa-user-plus"></i> Tạo tài khoản + QR</button>
 		</div>
 
 		<div class="vc-section-title">Danh sách lái xe</div>
@@ -67,6 +75,7 @@ function accCard(d) {
 		: d.enabled
 		? '<span class="vc-badge vc-badge-success">Đang mở</span>'
 		: '<span class="vc-badge vc-badge-danger">Đã khóa</span>';
+	const ttBadge = d.is_to_truong ? ' <span class="vc-badge vc-badge-primary">⭐ Tổ trưởng</span>' : "";
 	let actions = "";
 	if (!d.has_account) {
 		actions = `<button class="vc-btn-primary" data-create-existing="${escapeHtml(d.driver)}" style="flex:1"><i class="fas fa-qrcode"></i> Tạo tài khoản + QR</button>`;
@@ -76,16 +85,20 @@ function accCard(d) {
 			<button class="vc-btn-ghost" data-regen="${escapeHtml(d.driver)}">Cấp lại QR</button>
 			<button class="${d.enabled ? "vc-btn-danger" : "vc-btn-success"}" data-toggle="${escapeHtml(d.driver)}" data-en="${d.enabled ? 1 : 0}">${d.enabled ? "Khóa" : "Mở"}</button>`;
 	}
+	// Admin: đặt / bỏ tổ trưởng (áp dụng cho cả lái xe chưa có TK — sẽ tự cấp TK).
+	const ttAction = IS_ADMIN
+		? `<button class="${d.is_to_truong ? "vc-btn-ghost" : "vc-btn-success"}" data-tt="${escapeHtml(d.driver)}" data-on="${d.is_to_truong ? 0 : 1}">${d.is_to_truong ? "Bỏ tổ trưởng" : "⭐ Đặt tổ trưởng"}</button>`
+		: "";
 	return `
 	<div class="vc-order-card" data-drv="${escapeHtml(d.driver)}">
 		<div class="vc-order-head">
 			<div>
-				<div class="vc-order-cust">${escapeHtml(d.full_name || d.driver)}</div>
+				<div class="vc-order-cust">${escapeHtml(d.full_name || d.driver)}${ttBadge}</div>
 				<div class="vc-order-addr">${escapeHtml(d.cell_number || "")}${d.user ? " · " + escapeHtml(d.user) : ""}</div>
 			</div>
 			${badge}
 		</div>
-		<div class="vc-flex vc-gap-2 vc-mt-2" style="flex-wrap:wrap">${actions}</div>
+		<div class="vc-flex vc-gap-2 vc-mt-2" style="flex-wrap:wrap">${actions}${ttAction}</div>
 	</div>`;
 }
 
@@ -129,6 +142,21 @@ function bindList() {
 			}
 		})
 	);
+	wrap.querySelectorAll("[data-tt]").forEach((b) =>
+		b.addEventListener("click", async () => {
+			const on = b.dataset.on === "1";
+			b.disabled = true;
+			try {
+				const d = await call("vanchuyen.api.to_truong.set_driver_as_to_truong", { driver: b.dataset.tt, on: on ? 1 : 0 });
+				replace(d);
+				draw();
+				showToast(d.is_to_truong ? "Đã đặt làm tổ trưởng" : "Đã bỏ tổ trưởng", "success");
+			} catch (e) {
+				b.disabled = false;
+				showToast(errText(e), "error");
+			}
+		})
+	);
 }
 
 function find(driver) {
@@ -154,12 +182,14 @@ async function createNew() {
 		showToast("Nhập họ tên và số điện thoại", "error");
 		return;
 	}
+	const asTt = IS_ADMIN && document.getElementById("vc-nd-tt") && document.getElementById("vc-nd-tt").checked;
 	const btn = document.getElementById("vc-nd-create");
 	btn.disabled = true;
 	try {
-		const d = await call("vanchuyen.api.to_truong.create_driver_account", { full_name: ten, cell_number: sdt });
+		const method = asTt ? "vanchuyen.api.to_truong.create_to_truong_account" : "vanchuyen.api.to_truong.create_driver_account";
+		const d = await call(method, { full_name: ten, cell_number: sdt });
 		replace(d);
-		showToast("Đã tạo tài khoản " + (d.full_name || ""), "success");
+		showToast(`Đã tạo tài khoản ${asTt ? "tổ trưởng " : ""}${d.full_name || ""}`, "success");
 		draw();
 		showQR(d);
 	} catch (e) {

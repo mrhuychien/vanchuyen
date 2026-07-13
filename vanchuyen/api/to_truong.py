@@ -11,9 +11,24 @@ import frappe
 from frappe import _
 from frappe.utils import cint, get_url
 
-from vanchuyen.api.guards import require_dieu_phoi
+from vanchuyen.api.guards import require_admin, require_dieu_phoi
 
 LAI_XE_ROLE = "Lái Xe"
+TO_TRUONG_ROLE = "Điều Phối Vận Chuyển"  # tổ trưởng = role Điều Phối (được xếp chuyến)
+
+
+def _set_user_role(email, role, on):
+	"""Thêm / gỡ 1 role cho User (Website User vẫn không vào desk vì user_type)."""
+	if not email or not frappe.db.exists("User", email):
+		return
+	user = frappe.get_doc("User", email)
+	has = role in [r.role for r in user.get("roles", [])]
+	if on and not has:
+		user.append("roles", {"role": role})
+		user.save(ignore_permissions=True)
+	elif not on and has:
+		user.set("roles", [r for r in user.get("roles", []) if r.role != role])
+		user.save(ignore_permissions=True)
 
 
 def _gen_token():
@@ -72,6 +87,7 @@ def _driver_payload(driver_name):
 		as_dict=True,
 	)
 	enabled = frappe.db.get_value("User", d.custom_user, "enabled") if d.custom_user else 0
+	is_tt = TO_TRUONG_ROLE in frappe.get_roles(d.custom_user) if d.custom_user else False
 	return {
 		"driver": d.name,
 		"full_name": d.full_name,
@@ -79,6 +95,7 @@ def _driver_payload(driver_name):
 		"user": d.custom_user or "",
 		"enabled": bool(enabled),
 		"has_account": bool(d.custom_user),
+		"is_to_truong": bool(is_tt),
 		"login_url": _login_url(d.custom_login_token) if d.custom_login_token else "",
 	}
 
@@ -147,3 +164,44 @@ def set_driver_enabled(driver, enabled):
 	frappe.db.set_value("User", user, "enabled", 1 if cint(enabled) else 0)
 	frappe.db.commit()
 	return _driver_payload(driver)
+
+
+# ── ADMIN: quản lý tổ trưởng ──────────────────────────────────────────────────
+@frappe.whitelist()
+def set_driver_as_to_truong(driver, on):
+	"""ADMIN: đặt / bỏ 1 lái xe làm tổ trưởng (thêm/gỡ role Điều Phối trên tài khoản)."""
+	require_admin()
+	d = frappe.db.get_value("Driver", driver, ["full_name", "cell_number", "custom_user"], as_dict=True)
+	if not d:
+		frappe.throw(_("Không tìm thấy lái xe."))
+	email = d.custom_user
+	if not email:
+		# Chưa có tài khoản → cấp luôn (Website User + role Lái Xe) rồi mới gắn tổ trưởng.
+		email = _ensure_user(d.full_name, d.cell_number)
+		frappe.db.set_value("Driver", driver, {"custom_user": email, "custom_login_token": _gen_token()})
+	_set_user_role(email, TO_TRUONG_ROLE, cint(on))
+	frappe.db.commit()
+	return _driver_payload(driver)
+
+
+@frappe.whitelist()
+def create_to_truong_account(full_name, cell_number):
+	"""ADMIN: tạo tài khoản TỔ TRƯỞNG mới (Driver + Website User + role Lái Xe & Điều Phối + QR)."""
+	require_admin()
+	full_name = (full_name or "").strip()
+	cell_number = (cell_number or "").strip()
+	if not full_name or not cell_number:
+		frappe.throw(_("Nhập họ tên và số điện thoại."))
+	email = _ensure_user(full_name, cell_number)
+	_set_user_role(email, TO_TRUONG_ROLE, 1)
+	driver = frappe.get_doc(
+		{
+			"doctype": "Driver",
+			"full_name": full_name,
+			"cell_number": cell_number,
+			"custom_user": email,
+			"custom_login_token": _gen_token(),
+		}
+	).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return _driver_payload(driver.name)

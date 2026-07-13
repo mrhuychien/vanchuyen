@@ -10,9 +10,21 @@ DIEU_PHOI_ROLE = "Điều Phối Vận Chuyển"
 LAI_XE_ROLE = "Lái Xe"
 
 
+def is_admin(user=None):
+	"""Administrator hoặc System Manager = quản trị viên (được làm mọi thao tác quản lý)."""
+	user = user or frappe.session.user
+	return user == "Administrator" or "System Manager" in frappe.get_roles(user)
+
+
+def require_admin():
+	"""Chỉ quản trị viên (Administrator / System Manager)."""
+	if not is_admin():
+		frappe.throw(_("Chỉ quản trị viên được phép thao tác này."), frappe.PermissionError)
+
+
 def require_dieu_phoi():
-	"""Throw PermissionError nếu session user thiếu role Điều Phối."""
-	if DIEU_PHOI_ROLE not in frappe.get_roles(frappe.session.user):
+	"""Throw PermissionError nếu session user thiếu role Điều Phối (quản trị viên luôn được phép)."""
+	if DIEU_PHOI_ROLE not in frappe.get_roles(frappe.session.user) and not is_admin():
 		frappe.throw(_("Chỉ Điều Phối Vận Chuyển được phép thao tác này."), frappe.PermissionError)
 
 

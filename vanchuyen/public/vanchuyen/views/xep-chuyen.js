@@ -373,7 +373,9 @@ function updateCta() {
 	cta.innerHTML =
 		`<div class="vc-xep-cta-info ${tone}">${b.rows.length} đơn · ` +
 		`${cap > 0 ? `${formatM3(used)} / ${formatM3(cap)} m³ (${pct}%)` : `${formatM3(used)} m³`}</div>` +
+		`<button type="button" class="vc-xep-cta-btn vc-xep-cta-save" id="vc-cta-save"><i class="fas fa-save"></i> Lưu</button>` +
 		`<button type="button" class="vc-xep-cta-btn" id="vc-cta-submit"><i class="fas fa-paper-plane"></i> Xuất</button>`;
+	document.getElementById("vc-cta-save").addEventListener("click", () => saveTrip(false));
 	document.getElementById("vc-cta-submit").addEventListener("click", () => saveTrip(true));
 }
 
@@ -412,7 +414,7 @@ async function saveTrip(thenSubmit) {
 		return;
 	}
 	S.saving = true;
-	document.querySelectorAll("#vc-b-submit, #vc-b-save, #vc-cta-submit").forEach((el) => (el.disabled = true));
+	document.querySelectorAll("#vc-b-submit, #vc-b-save, #vc-cta-submit, #vc-cta-save").forEach((el) => (el.disabled = true));
 	try {
 		const doc = await call("vanchuyen.api.dieu_phoi.save_trip", { payload: JSON.stringify(builderPayload()) });
 		b.name = doc.name;

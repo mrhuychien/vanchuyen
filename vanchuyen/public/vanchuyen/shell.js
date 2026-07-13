@@ -4,7 +4,7 @@ import { escapeHtml } from "./lib/format.js";
 import { skeleton } from "./lib/dom.js";
 
 // Build marker (Luật vàng #2): so với VC_CONTEXT.shellBuild để phát hiện shell cũ do cache.
-const BUILD = "2026-07-13-p2";
+const BUILD = "2026-07-13-p3";
 window.APP = { build: BUILD };
 
 const CTX = window.VC_CONTEXT || {};
@@ -19,9 +19,10 @@ function withV(p) {
 
 const ROUTES = [
 	{ path: "/xep-chuyen", module: "./views/xep-chuyen.js", label: "Xếp chuyến", icon: "fa-boxes-packing", roles: ["dieu_phoi"] },
-	{ path: "/tai-khoan", module: "./views/tai-khoan.js", label: "Tài khoản", icon: "fa-id-card", roles: ["dieu_phoi"] },
+	{ path: "/tai-khoan", module: "./views/tai-khoan.js", label: "Tài khoản", icon: "fa-id-card", roles: ["dieu_phoi", "admin"] },
 	{ path: "/chuyen", module: "./views/chuyen.js", label: "Chuyến của tôi", icon: "fa-truck", roles: ["lai_xe"] },
 	{ path: "/chuyen/:id", module: "./views/chuyen-detail.js", label: "Chi tiết chuyến", roles: ["lai_xe"], hideNav: true },
+	{ path: "/tong-quan", module: "./views/tong-quan.js", label: "Tổng quan", icon: "fa-chart-line", roles: ["dieu_hanh"] },
 	{ path: "/dieu-phoi", module: "./views/dieu-phoi.js", label: "Điều hành", icon: "fa-clipboard-list", roles: ["dieu_hanh"] },
 	{ path: "/nhap-don", module: "./views/nhap-don.js", label: "Nhập đơn", icon: "fa-file-invoice", roles: ["dieu_hanh"] },
 ];
@@ -31,9 +32,10 @@ function canAccess(route) {
 }
 
 function landing() {
+	// Tổ trưởng (Điều Phối) → xếp chuyến; Lái xe → chuyến của tôi; Điều hành/Admin → tổng quan.
 	if (CTX.is_dieu_phoi) return "/xep-chuyen";
 	if (CTX.is_lai_xe) return "/chuyen";
-	if (CTX.is_dieu_hanh) return "/dieu-phoi";
+	if (CTX.is_dieu_hanh) return "/tong-quan";
 	return "/xep-chuyen";
 }
 
