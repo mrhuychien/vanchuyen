@@ -26,10 +26,12 @@ def get_pool(tu_ngay=None, den_ngay=None, tinh=None, tim=None, page=1, page_size
 		"si.docstatus = 1",
 		"si.is_return = 0",
 		"si.`custom_hình_thức_vận_chuyển` = 'Tự vận chuyển'",
+		# Còn kiện chưa xếp (chưa 'Đủ'). 'Một phần' vẫn ở pool để xếp nốt phần dư.
 		"COALESCE(si.`custom_trang_thai_xep`, '') != 'Đủ'",
-		# CHỈ đơn 'Đang xử lý' (hoặc chưa set trạng thái) mới vào pool xếp chuyến.
-		# Sau khi xuất chuyến → reconcile đặt 'Đang giao hàng' → tự rời pool.
-		"COALESCE(NULLIF(si.`custom_trạng_thái_vận_chuyển`, ''), 'Đang xử lý') = 'Đang xử lý'",
+		# Vào pool: đơn 'Đang xử lý' (chưa lên chuyến) HOẶC 'Đang giao hàng' còn dư kiện
+		# (đã xếp một phần ở chuyến trước). Loại đơn đã giao xong / đã nộp chứng từ.
+		"COALESCE(si.`custom_trạng_thái_vận_chuyển`, '') NOT IN "
+		"('Đã giao hàng, chụp chứng từ', 'Đã nộp chứng từ')",
 	]
 	params = {}
 	if tu_ngay:
