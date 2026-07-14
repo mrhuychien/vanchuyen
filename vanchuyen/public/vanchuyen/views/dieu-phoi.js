@@ -100,6 +100,8 @@ const CSS_TEXT = `
 .rvhg-status-legend-count { background:rgba(0,0,0,0.14); border-radius:999px; padding:1px 8px; font-weight:800; font-size:1.05em; line-height:1.5; min-width:20px; text-align:center; }
 .rvhg-status-legend-item:hover { transform:translateY(-2px); box-shadow:0 6px 16px rgba(0,0,0,0.12); }
 .rvhg-status-legend-item.rvhg-active { border-color:var(--rvhg-primary); box-shadow:0 6px 16px rgba(124,58,237,0.25); transform:translateY(-2px); }
+.rvhg-status-suco { background:linear-gradient(135deg,#fee2e2 0%,#fecaca 100%); color:#991b1b; }
+.rvhg-status-suco.rvhg-active { border-color:var(--rvhg-danger); box-shadow:0 6px 16px rgba(239,68,68,0.3); }
 .rvhg-status-processing { background:linear-gradient(135deg,#fef3c7 0%,#fde68a 100%); color:#92400e; }
 .rvhg-status-delivering { background:linear-gradient(135deg,#dbeafe 0%,#bfdbfe 100%); color:#1e3a8a; }
 .rvhg-status-delivered { background:linear-gradient(135deg,#fed7aa 0%,#fdba74 100%); color:#9a3412; }
@@ -422,7 +424,7 @@ let _docKbBound = false;
 
 let filters = {
 	today: false, yesterday: false, date: "", status: "", fromDate: "", toDate: "",
-	customer: "", addressName: "", customerGroup: "", po: "", shippingType: null, statusFilter: null,
+	customer: "", addressName: "", customerGroup: "", po: "", shippingType: null, statusFilter: null, onlySuCo: false,
 };
 
 const shippingTypeConfig = {
@@ -569,6 +571,21 @@ function renderStatusLegend() {
 		item.addEventListener("click", () => toggleStatusFilter(status));
 		legend.appendChild(item);
 	});
+	// Chip lọc nhanh "Có sự cố" (đơn giao qua đơn vị VC đang có sự cố mở).
+	const startDate = getTimeRangeStartDate();
+	const scCount = allInvoices.filter((inv) => (!startDate || inv.posting_date >= startDate) && inv.custom_co_su_co).length;
+	const sc = document.createElement("span");
+	sc.className = `rvhg-status-legend-item rvhg-status-suco ${filters.onlySuCo ? "rvhg-active" : ""}`;
+	sc.dataset.suco = "1";
+	sc.title = `Có sự cố: ${scCount} đơn`;
+	sc.innerHTML = `🚨 Có sự cố<span class="rvhg-status-legend-count">${scCount}</span>`;
+	sc.addEventListener("click", toggleSuCoFilter);
+	legend.appendChild(sc);
+}
+function toggleSuCoFilter() {
+	filters.onlySuCo = !filters.onlySuCo;
+	document.querySelectorAll(".rvhg-status-suco").forEach((el) => el.classList.toggle("rvhg-active", filters.onlySuCo));
+	applyFilters();
 }
 function renderShippingTypeButtons() {
 	const container = document.getElementById("rvhg-shipping-type-buttons");
@@ -729,7 +746,7 @@ function applyFilters() {
 	updatePaginationButtons();
 }
 function clearFilters() {
-	filters = { today: false, yesterday: false, date: "", status: "", fromDate: "", toDate: "", customer: "", addressName: "", customerGroup: "", po: "", shippingType: null, statusFilter: null };
+	filters = { today: false, yesterday: false, date: "", status: "", fromDate: "", toDate: "", customer: "", addressName: "", customerGroup: "", po: "", shippingType: null, statusFilter: null, onlySuCo: false };
 	document.getElementById("rvhg-filter-today").classList.remove("rvhg-active");
 	document.getElementById("rvhg-filter-yesterday").classList.remove("rvhg-active");
 	document.querySelectorAll(".rvhg-stat-card").forEach((c) => c.classList.remove("rvhg-active"));
@@ -751,6 +768,7 @@ function getFilteredInvoices() {
 		}
 		if (filters.status && inv[F.shipping_status] !== filters.status) return false;
 		if (filters.statusFilter && inv[F.shipping_status] !== filters.statusFilter) return false;
+		if (filters.onlySuCo && !inv.custom_co_su_co) return false;
 		if (filters.customer && !((inv.customer || "") + " " + (inv.customer_name || "")).toLowerCase().includes(filters.customer)) return false;
 		if (filters.addressName && !((inv.shipping_address_name || "") + " " + (inv.shipping_address || "")).toLowerCase().includes(filters.addressName)) return false;
 		if (filters.customerGroup && inv.customer_group !== filters.customerGroup) return false;
@@ -1366,7 +1384,7 @@ export async function render({ container }) {
 	allInvoices = []; customerGroups = []; selectedInvoices = []; shippingTypes = []; shippingStatuses = [];
 	currentPage = 1; totalLoadedRecords = 0; totalAvailable = 0; loadPageNum = 1; isLoading = false; hasMoreData = true;
 	currentTimeRange = "30"; lastSelectedIndex = -1;
-	filters = { today: false, yesterday: false, date: "", status: "", fromDate: "", toDate: "", customer: "", addressName: "", customerGroup: "", po: "", shippingType: null, statusFilter: null };
+	filters = { today: false, yesterday: false, date: "", status: "", fromDate: "", toDate: "", customer: "", addressName: "", customerGroup: "", po: "", shippingType: null, statusFilter: null, onlySuCo: false };
 
 	updateTimeRangeInfo();
 	await loadCustomerGroups();
