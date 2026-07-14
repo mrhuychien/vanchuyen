@@ -4,7 +4,6 @@ import { call, errText } from "../lib/api.js";
 import { skeleton } from "../lib/dom.js";
 import { escapeHtml, formatCurrency, formatDate } from "../lib/format.js";
 import { showToast } from "../components/toast.js";
-import { showModal } from "../components/modal.js";
 import { confirmDialog } from "../components/confirm.js";
 
 // BIN VietQR các ngân hàng phổ biến (map tên/alias → mã). Tự nhận diện không phân biệt
@@ -98,20 +97,23 @@ let ROOT = null;
 const S = { nam: 0, thang: 0, selected: null, cal: {}, trips: [], dayFilter: "all" };
 
 const CSS = `
-.tc-cal { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
-.tc-wd { text-align:center; font-size:.7rem; font-weight:700; color:var(--vc-muted,#6b7280); padding:4px 0; }
-.tc-day { aspect-ratio:1; border:1.5px solid var(--vc-border,#e5e7eb); border-radius:10px; background:#fff;
-  display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; padding:2px; position:relative; transition:all .12s; }
+.tc-cal { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }
+.tc-wd { text-align:center; font-size:.62rem; font-weight:700; color:var(--vc-muted,#6b7280); padding:2px 0; }
+.tc-day { min-height:36px; border:1px solid var(--vc-border,#e5e7eb); border-radius:7px; background:#fff;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; padding:1px; position:relative; transition:all .12s; }
 .tc-day:hover { border-color:#6366f1; }
-.tc-day.tc-other { opacity:.35; cursor:default; }
+.tc-day.tc-other { opacity:.3; cursor:default; }
 .tc-day.tc-today { border-color:#6366f1; }
 .tc-day.tc-sel { border-color:#ec4899; background:#fdf2f8; }
 .tc-day.tc-has { background:#eef2ff; }
-.tc-day-n { font-size:.9rem; font-weight:700; }
-.tc-day-amt { font-size:.6rem; font-weight:700; color:#4f46e5; line-height:1; margin-top:1px; }
-.tc-day-dot { position:absolute; top:4px; right:4px; width:7px; height:7px; border-radius:50%; background:#ef4444; }
-.tc-cal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
-.tc-nav { width:34px; height:34px; border-radius:9px; border:1px solid var(--vc-border,#e5e7eb); background:#fff; cursor:pointer; font-size:.9rem; }
+.tc-day-n { font-size:.78rem; font-weight:700; line-height:1; }
+.tc-day-amt { font-size:.52rem; font-weight:700; color:#4f46e5; line-height:1; margin-top:1px; }
+.tc-day-dot { position:absolute; top:3px; right:3px; width:6px; height:6px; border-radius:50%; background:#ef4444; }
+.tc-cal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+.tc-nav { width:30px; height:30px; border-radius:8px; border:1px solid var(--vc-border,#e5e7eb); background:#fff; cursor:pointer; font-size:.85rem; }
+.tc-qr { text-align:center; margin:.5rem 0; }
+.tc-qr img { width:148px; height:148px; background:#fff; border:1px solid var(--vc-border,#e5e7eb); border-radius:10px; padding:5px; }
+.tc-qr a { display:block; font-size:.72rem; margin-top:.2rem; color:#6366f1; text-decoration:none; }
 .tc-orders { margin:.4rem 0; padding:.5rem .6rem; background:var(--vc-gray-50,#f9fafb); border-radius:8px; font-size:.8rem; }
 .tc-order { display:flex; justify-content:space-between; gap:8px; padding:2px 0; }
 .tc-order-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -141,15 +143,16 @@ export async function render({ container }) {
 	container.innerHTML = `
 		<div id="tc-quydau"></div>
 		<div class="vc-section-title">📅 Trả cước theo chuyến</div>
-		<div class="vc-card vc-mb-3">
+		<div class="vc-card vc-mb-3" style="max-width:440px">
 			<div class="tc-cal-head">
 				<button class="tc-nav" id="tc-prev"><i class="fas fa-chevron-left"></i></button>
 				<div style="font-weight:800" id="tc-month"></div>
 				<button class="tc-nav" id="tc-next"><i class="fas fa-chevron-right"></i></button>
 			</div>
-			<div id="tc-cal">${skeleton(40, 3)}</div>
+			<div id="tc-cal">${skeleton(30, 2)}</div>
 		</div>
 		<div id="tc-day"></div>`;
+	S.selected = new Date().toISOString().split("T")[0]; // hiện sẵn chuyến hôm nay
 	// Phần đầu = port NGUYÊN trang mẫu Quản Trị Quỹ Dầu (chi tiền thủ công).
 	// Dynamic import kèm assetVersion để không bị cache bản cũ khi deploy.
 	try {
@@ -162,6 +165,7 @@ export async function render({ container }) {
 	document.getElementById("tc-prev").addEventListener("click", () => shiftMonth(-1));
 	document.getElementById("tc-next").addEventListener("click", () => shiftMonth(1));
 	await loadCalendar();
+	await loadDay(); // hiện sẵn chuyến ngày hôm nay
 }
 
 function shiftMonth(delta) {
@@ -329,16 +333,19 @@ function tripCard(t) {
 	if (paid) {
 		action = `<a class="vc-btn-ghost" href="/app/journal-entry/${encodeURIComponent(t.cuoc_je || "")}" target="_blank"><i class="fas fa-external-link-alt"></i> Xem bút toán</a>`;
 	} else {
+		// QR hiện SẴN theo tổng cước hiện tại (không cần bấm).
+		const qrUrl = t.bank && t.bank.stk ? vietQrUrl(t.bank, Number(t.tong_cuoc) || 0, `Cuoc ${t.name} ${t.ten_lai_xe || ""}`.trim()) : "";
+		const qrBlock = qrUrl
+			? `<div class="tc-qr"><img src="${escapeHtml(qrUrl)}" alt="QR trả cước" loading="lazy" /><a href="${escapeHtml(qrUrl)}" target="_blank">Phóng to QR ⤢</a></div>`
+			: "";
 		action =
 			`<div class="tc-cuoc-row">
 				<input class="tc-cuoc-input" type="number" min="0" step="1000" value="${Math.round(Number(t.tong_cuoc) || 0)}" data-cuoc="${escapeHtml(t.name)}" />
-				<button class="vc-btn-ghost" data-savecuoc="${escapeHtml(t.name)}">Lưu tiền</button>
+				<button class="vc-btn-ghost" data-savecuoc="${escapeHtml(t.name)}">Lưu &amp; cập nhật QR</button>
 				${t.cuoc_thu_cong ? '<span class="vc-badge vc-badge-muted">sửa tay</span>' : ""}
 			</div>
-			<div class="vc-flex vc-gap-2" style="flex-wrap:wrap">
-				<button class="vc-btn-ghost" data-qr="${escapeHtml(t.name)}"><i class="fas fa-qrcode"></i> QR chuyển khoản</button>
-				<button class="vc-btn-success" data-pay="${escapeHtml(t.name)}"><i class="fas fa-check"></i> Tạo bút toán</button>
-			</div>`;
+			${qrBlock}
+			<button class="vc-btn-success vc-btn-block" data-pay="${escapeHtml(t.name)}"><i class="fas fa-check"></i> Tạo bút toán</button>`;
 	}
 
 	return `
@@ -376,9 +383,6 @@ function bindTrips() {
 			}
 		})
 	);
-	box.querySelectorAll("[data-qr]").forEach((b) =>
-		b.addEventListener("click", () => showQr(b.dataset.qr, box))
-	);
 	box.querySelectorAll("[data-pay]").forEach((b) =>
 		b.addEventListener("click", () => {
 			const name = b.dataset.pay;
@@ -403,34 +407,4 @@ function bindTrips() {
 
 function cssEsc(s) {
 	return String(s).replace(/["\\]/g, "\\$&");
-}
-
-async function showQr(name, box) {
-	const t = S.trips.find((x) => x.name === name);
-	if (!t) return;
-	const inp = box.querySelector(`[data-cuoc="${cssEsc(name)}"]`);
-	const amount = inp ? Number(inp.value) || 0 : Number(t.tong_cuoc) || 0;
-	if (!t.bank || !t.bank.stk) {
-		showToast("Lái xe chưa có số tài khoản ngân hàng", "warning");
-		return;
-	}
-	const content = `Cuoc ${name} ${t.ten_lai_xe || ""}`.trim();
-	const url = vietQrUrl(t.bank, amount, content);
-	if (!url) {
-		showToast("Không nhận diện được ngân hàng của lái xe", "warning");
-		return;
-	}
-	const body = `
-		<div style="text-align:center">
-			<img src="${escapeHtml(url)}" alt="QR" style="width:230px;height:230px;background:#fff;border-radius:10px;padding:6px" />
-		</div>
-		<div class="vc-mt-2 vc-text-sm">
-			<div><b>NH:</b> ${escapeHtml(t.bank.nganhang || "")}</div>
-			<div><b>STK:</b> ${escapeHtml(t.bank.stk)}</div>
-			<div><b>Chủ TK:</b> ${escapeHtml(t.bank.tentk || "")}</div>
-			<div><b>Số tiền:</b> ${formatCurrency(amount)}</div>
-			<div><b>Nội dung:</b> ${escapeHtml(content)}</div>
-		</div>`;
-	const footer = `<button class="vc-btn-primary" data-vc-close>Xong</button>`;
-	showModal({ title: "QR chuyển khoản cho lái xe", body, footer });
 }

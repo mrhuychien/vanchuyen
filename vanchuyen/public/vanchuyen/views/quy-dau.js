@@ -2,23 +2,22 @@
 // Dùng làm PHẦN ĐẦU của #/tra-cuoc. CSS scope trong .qd-wrap để KHÔNG rò theme tối ra portal.
 // Data dùng frappe.call trực tiếp (user điều hành/kế toán có quyền GL/JE/Driver) — giữ giống mẫu.
 
-const FONT_LINK = "https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap";
-
 const CSS_TEXT = `
 .qd-wrap, .qd-wrap * { margin:0; padding:0; box-sizing:border-box; }
 .qd-wrap {
-  --qd-primary:#6366f1; --qd-success:#22c55e; --qd-warning:#f59e0b; --qd-danger:#ef4444; --qd-info:#0ea5e9;
-  --qd-bg-dark:#0f172a; --qd-bg-card:#1e293b; --qd-bg-input:#0f172a;
-  --qd-text-primary:#f1f5f9; --qd-text-secondary:#94a3b8; --qd-text-muted:#64748b; --qd-border:#334155;
+  --qd-primary:#6366f1; --qd-success:#16a34a; --qd-warning:#d97706; --qd-danger:#dc2626; --qd-info:#0284c7;
+  --qd-bg-dark:transparent; --qd-bg-card:#ffffff; --qd-bg-input:#f8fafc;
+  --qd-text-primary:#1f2937; --qd-text-secondary:#64748b; --qd-text-muted:#94a3b8; --qd-border:#e5e7eb;
   --qd-gradient:linear-gradient(135deg,#6366f1 0%,#8b5cf6 50%,#ec4899 100%);
-  --qd-gradient-gold:linear-gradient(135deg,#fbbf24 0%,#f59e0b 50%,#d97706 100%);
+  --qd-gradient-gold:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);
   --qd-gradient-danger:linear-gradient(135deg,#ef4444 0%,#dc2626 100%);
   --qd-gradient-success:linear-gradient(135deg,#22c55e 0%,#15803d 100%);
-  --qd-radius-sm:8px; --qd-radius-md:12px; --qd-radius-lg:16px; --qd-shadow:0 10px 15px -3px rgb(0 0 0 / 0.4);
-  font-family:'Be Vietnam Pro',sans-serif; background:var(--qd-bg-dark); color:var(--qd-text-primary);
-  line-height:1.6; border-radius:var(--qd-radius-lg); padding:6px; display:block; margin-bottom:20px;
+  --qd-radius-sm:8px; --qd-radius-md:12px; --qd-radius-lg:16px; --qd-shadow:0 1px 3px rgba(0,0,0,.07);
+  color:var(--qd-text-primary); line-height:1.6; display:block; margin-bottom:16px;
 }
-.qd-container { max-width:1500px; margin:0 auto; padding:14px; }
+.qd-container { max-width:100%; margin:0 auto; padding:0; }
+.qd-logo { color:#fff !important; }
+.qd-header, .qd-stats-panel, .qd-card { margin-bottom:14px; }
 .qd-header { background:var(--qd-bg-card); border:1px solid var(--qd-border); border-radius:var(--qd-radius-lg);
   padding:16px 24px; margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px; box-shadow:var(--qd-shadow); }
 .qd-header-left { display:flex; align-items:center; gap:14px; }
@@ -117,7 +116,7 @@ const CSS_TEXT = `
 .qd-fab { display:none; position:fixed; bottom:20px; right:20px; height:56px; padding:0 20px; background:var(--qd-gradient-danger); border:none; border-radius:28px; color:#fff; font-size:14px; font-weight:700; font-family:inherit; cursor:pointer; box-shadow:0 8px 24px rgba(239,68,68,.5); align-items:center; gap:8px; z-index:100; }
 .qd-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.8); backdrop-filter:blur(8px); z-index:9999; display:none; justify-content:center; align-items:center; padding:20px; }
 .qd-modal-overlay.show { display:flex; }
-.qd-modal-content { background:var(--qd-bg-card); border:1px solid var(--qd-border); border-radius:var(--qd-radius-lg); padding:24px; width:100%; max-width:480px; max-height:90vh; overflow-y:auto; font-family:'Be Vietnam Pro',sans-serif; color:var(--qd-text-primary); }
+.qd-modal-content { background:var(--qd-bg-card); border:1px solid var(--qd-border); border-radius:var(--qd-radius-lg); padding:24px; width:100%; max-width:480px; max-height:90vh; overflow-y:auto; font-family:inherit; color:var(--qd-text-primary); }
 .qd-modal-content * { box-sizing:border-box; }
 .qd-modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
 .qd-modal-title { font-size:16px; font-weight:700; display:flex; align-items:center; gap:10px; }
@@ -303,7 +302,7 @@ const COMPANY = "Công ty cổ phần Hoàng Giang";
 const FUND_ACCOUNT = "141 - Tạm ứng - HGC";
 const FUND_PARTY = "HR-EMP-00001";
 const FY = { start: "2026-04-01", end: "2027-03-31" };
-const ITEMS_PER_PAGE = 15;
+const ITEMS_PER_PAGE = 6;
 
 const BANK_LIST = [
 	{ id: "970422", name: "MB Bank", aliases: ["mb", "mbbank", "mb bank", "militarybank"] },
@@ -734,9 +733,6 @@ function bind() {
 }
 
 function injectCss() {
-	if (!document.getElementById("qd-font-link")) {
-		const l = document.createElement("link"); l.id = "qd-font-link"; l.rel = "stylesheet"; l.href = FONT_LINK; document.head.appendChild(l);
-	}
 	if (!document.getElementById("qd-styles")) {
 		const s = document.createElement("style"); s.id = "qd-styles"; s.textContent = CSS_TEXT; document.head.appendChild(s);
 	}
