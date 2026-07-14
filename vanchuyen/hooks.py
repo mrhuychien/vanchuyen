@@ -40,6 +40,8 @@ fixtures = [
                     "Driver-custom_is_to_truong",
                     "Sales Invoice-custom_gửi_xe",
                     "Vehicle-custom_phu_phi_xe",
+                    "Sales Invoice-custom_co_su_co",
+                    "Sales Invoice-custom_su_co_tom_tat",
                 ],
             ]
         ],

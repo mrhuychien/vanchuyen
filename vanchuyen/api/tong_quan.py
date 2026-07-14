@@ -114,10 +114,24 @@ def get_overview(period="30"):
 			}
 		)
 
+	# ── Sự cố vận chuyển (đơn giao qua đơn vị VC) ──
+	su_co_mo = 0
+	su_co_loai = []
+	if frappe.db.table_exists("Su Co Van Chuyen"):
+		su_co_mo = cint(frappe.db.count("Su Co Van Chuyen", {"trang_thai": ["in", ["Mới", "Đang xử lý"]]}))
+		for row in frappe.db.sql(
+			"""SELECT loai_su_co AS l, COUNT(*) AS n FROM `tabSu Co Van Chuyen`
+			   WHERE trang_thai IN ('Mới','Đang xử lý') GROUP BY loai_su_co ORDER BY n DESC""",
+			as_dict=True,
+		):
+			su_co_loai.append({"label": row.l, "count": cint(row.n)})
+
 	return {
 		"period": period,
 		"start": start,
 		"total": total,
+		"su_co_mo": su_co_mo,
+		"su_co_loai": su_co_loai,
 		"tong_kien": flt(agg.tong_kien),
 		"the_tich": flt(agg.the_tich),
 		"chua_phan_cong": chua_phan_cong,

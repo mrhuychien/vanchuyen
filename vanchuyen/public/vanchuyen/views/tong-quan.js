@@ -123,6 +123,7 @@ function draw(d) {
 		kpi("Đã giao", formatNumber(d.da_giao), `Tỷ lệ giao ${d.ty_le_giao}%`, "#10b981"),
 		kpi("Đã nộp chứng từ", formatNumber(d.da_nop), "", "#059669"),
 		kpi("Chuyến xe", formatNumber(d.trips_total), "", "#8b5cf6"),
+		kpi("Sự cố đang mở", formatNumber(d.su_co_mo || 0), "Đơn giao qua đơn vị VC", (d.su_co_mo || 0) > 0 ? "#ef4444" : "#10b981"),
 	].join("");
 
 	const statusBars = d.by_status
@@ -165,8 +166,17 @@ function draw(d) {
 			<div class="vc-section-title">🚚 Chuyến xe (${formatNumber(d.trips_total)})</div>
 			${tripBars}
 		</div>
-		<div class="vc-card">
+		<div class="vc-card vc-mb-3">
 			<div class="vc-section-title">🏆 Top lái xe theo số chuyến</div>
 			${drivers}
-		</div>`;
+		</div>
+		${
+			(d.su_co_loai && d.su_co_loai.length)
+				? `<div class="vc-card">
+					<div class="vc-section-title">⚠️ Sự cố đang mở theo loại</div>
+					${d.su_co_loai.map((s) => barRow(s.label, s.count, d.su_co_mo || 0, "#ef4444")).join("")}
+					<a class="vc-btn-ghost vc-btn-block vc-mt-2" href="#/su-co">Xem tất cả sự cố →</a>
+				</div>`
+				: ""
+		}`;
 }
