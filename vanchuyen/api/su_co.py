@@ -64,9 +64,12 @@ def list_issues(trang_thai=None, loai_su_co=None, hinh_thuc=None, tim=None, page
 		fields=["name", "sales_invoice", "customer", "hinh_thuc", "po", "tinh", "ngay_phat_sinh",
 			"loai_su_co", "trang_thai", "so_kien_anh_huong", "gia_tri_anh_huong", "mo_ta",
 			"dinh_kem", "huong_xu_ly", "nguoi_phu_trach", "ngay_dong", "ghi_chu_xu_ly"],
-		order_by="field(trang_thai,'Mới','Đang xử lý','Đã xử lý','Đóng'), ngay_phat_sinh desc, modified desc",
+		order_by="ngay_phat_sinh desc, modified desc",
 		start=(page - 1) * page_size, page_length=page_size,
 	)
+	# Ưu tiên trạng thái Mới → Đang xử lý → Đã xử lý → Đóng (sort ổn định, giữ ngày desc).
+	_rank = {"Mới": 0, "Đang xử lý": 1, "Đã xử lý": 2, "Đóng": 3}
+	rows.sort(key=lambda r: _rank.get(r.get("trang_thai"), 9))
 	for r in rows:
 		r["ngay_phat_sinh"] = str(r["ngay_phat_sinh"]) if r.get("ngay_phat_sinh") else None
 		r["ngay_dong"] = str(r["ngay_dong"]) if r.get("ngay_dong") else None
