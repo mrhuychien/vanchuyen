@@ -128,6 +128,11 @@ const CSS_TEXT = `
 .rvhg-btn-view { flex-shrink:0; align-self:center; width:38px; height:38px; padding:0; border-radius:10px; border:1px solid var(--rvhg-gray-200); background:white; color:var(--rvhg-primary);
   cursor:pointer; font-weight:600; font-size:16px; transition:all .2s ease; display:flex; align-items:center; justify-content:center; font-family:inherit; }
 .rvhg-btn-view:hover { background:var(--rvhg-primary); color:white; border-color:var(--rvhg-primary); }
+.rvhg-btn-suco:hover { background:var(--rvhg-danger); border-color:var(--rvhg-danger); }
+.rvhg-btn-suco.rvhg-has-suco { border-color:var(--rvhg-danger); background:#fee2e2; }
+.rvhg-suco-label { font-weight:700; font-size:.85em; color:var(--rvhg-gray-700); margin:10px 0 5px; display:block; }
+.rvhg-suco-input { width:100%; padding:10px 12px; border:2px solid var(--rvhg-gray-200); border-radius:12px; font-family:inherit; font-size:14px; color:var(--rvhg-gray-800); background:white; }
+.rvhg-suco-input:focus { outline:none; border-color:var(--rvhg-primary); }
 .rvhg-invoice-header { display:flex; justify-content:space-between; align-items:center; flex-wrap:nowrap; gap:10px; }
 .rvhg-invoice-info { flex:1; min-width:0; }
 .rvhg-invoice-id { font-weight:700; color:var(--rvhg-primary); margin-bottom:2px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:.8rem; }
@@ -276,6 +281,8 @@ const MARKUP = `
         <button class="rvhg-filter-chip" id="rvhg-filter-yesterday" type="button"><span>📆 Hôm qua</span></button>
         <input type="date" id="rvhg-filter-date" class="rvhg-date-input" />
         <input type="text" id="rvhg-filter-po-quick" class="rvhg-po-search-input" placeholder="🔢 Số PO..." />
+        <input type="text" id="rvhg-filter-customer-quick" class="rvhg-po-search-input" placeholder="👤 Khách hàng..." />
+        <input type="text" id="rvhg-filter-address-quick" class="rvhg-po-search-input" placeholder="📍 Địa chỉ giao..." />
         <select id="rvhg-filter-status" class="rvhg-filter-select">
           <option value="">📋 Tất cả trạng thái</option>
           <option value="Đang xử lý">⏳ Đang xử lý</option>
@@ -698,8 +705,12 @@ function applyFilters() {
 	filters.date = document.getElementById("rvhg-filter-date").value;
 	filters.fromDate = document.getElementById("rvhg-filter-from-date").value;
 	filters.toDate = document.getElementById("rvhg-filter-to-date").value;
-	filters.customer = document.getElementById("rvhg-filter-customer").value.trim().toLowerCase();
-	filters.addressName = document.getElementById("rvhg-filter-address-name").value.trim().toLowerCase();
+	const quickCus = document.getElementById("rvhg-filter-customer-quick").value.trim().toLowerCase();
+	const advCus = document.getElementById("rvhg-filter-customer").value.trim().toLowerCase();
+	filters.customer = quickCus || advCus;
+	const quickAddr = document.getElementById("rvhg-filter-address-quick").value.trim().toLowerCase();
+	const advAddr = document.getElementById("rvhg-filter-address-name").value.trim().toLowerCase();
+	filters.addressName = quickAddr || advAddr;
 	filters.customerGroup = document.getElementById("rvhg-filter-customer-group").value;
 	const quickPo = document.getElementById("rvhg-filter-po-quick").value.trim().toLowerCase();
 	const advancedPo = document.getElementById("rvhg-filter-po").value.trim().toLowerCase();
@@ -723,7 +734,7 @@ function clearFilters() {
 	document.getElementById("rvhg-filter-yesterday").classList.remove("rvhg-active");
 	document.querySelectorAll(".rvhg-stat-card").forEach((c) => c.classList.remove("rvhg-active"));
 	document.querySelectorAll(".rvhg-status-legend-item").forEach((i) => i.classList.remove("rvhg-active"));
-	["rvhg-filter-status", "rvhg-filter-date", "rvhg-filter-from-date", "rvhg-filter-to-date", "rvhg-filter-customer", "rvhg-filter-address-name", "rvhg-filter-customer-group", "rvhg-filter-po-quick", "rvhg-filter-po"].forEach((id) => { document.getElementById(id).value = ""; });
+	["rvhg-filter-status", "rvhg-filter-date", "rvhg-filter-from-date", "rvhg-filter-to-date", "rvhg-filter-customer", "rvhg-filter-address-name", "rvhg-filter-customer-quick", "rvhg-filter-address-quick", "rvhg-filter-customer-group", "rvhg-filter-po-quick", "rvhg-filter-po"].forEach((id) => { document.getElementById(id).value = ""; });
 	applyFilters();
 }
 function getFilteredInvoices() {
@@ -740,8 +751,8 @@ function getFilteredInvoices() {
 		}
 		if (filters.status && inv[F.shipping_status] !== filters.status) return false;
 		if (filters.statusFilter && inv[F.shipping_status] !== filters.statusFilter) return false;
-		if (filters.customer && !(inv.customer || "").toLowerCase().includes(filters.customer)) return false;
-		if (filters.addressName && !(inv.shipping_address_name || "").toLowerCase().includes(filters.addressName)) return false;
+		if (filters.customer && !((inv.customer || "") + " " + (inv.customer_name || "")).toLowerCase().includes(filters.customer)) return false;
+		if (filters.addressName && !((inv.shipping_address_name || "") + " " + (inv.shipping_address || "")).toLowerCase().includes(filters.addressName)) return false;
 		if (filters.customerGroup && inv.customer_group !== filters.customerGroup) return false;
 		if (filters.po && !(inv[F.po] || "").toLowerCase().includes(filters.po)) return false;
 		return true;
@@ -1193,6 +1204,7 @@ function renderManagerView() {
 							<div class="rvhg-stat-item"><div class="rvhg-stat-label">Ngày</div><div class="rvhg-stat-value rvhg-stat-value-date">${formatDateToDDMMYYYY(invoice.posting_date)}</div></div>
 							<div class="rvhg-stat-item"><div class="rvhg-stat-label">Kiện</div><div class="rvhg-stat-value">${invoice[F.tong_kien] || 0}</div></div>
 							<div class="rvhg-stat-item"><div class="rvhg-stat-label">m³</div><div class="rvhg-stat-value">${convertToM3(invoice[F.thetichlo])}</div></div>
+							<button class="rvhg-btn-view rvhg-btn-suco ${invoice.custom_co_su_co ? "rvhg-has-suco" : ""}" type="button" data-action="suco" data-name="${escapeHtml(invoice.name)}" title="Ghi nhận sự cố" aria-label="Ghi nhận sự cố">🚨</button>
 							<button class="rvhg-btn-view" type="button" data-action="detail" data-name="${escapeHtml(invoice.name)}" title="Xem chi tiết" aria-label="Xem chi tiết">👁️</button>
 						</div>
 					</div>
@@ -1200,6 +1212,71 @@ function renderManagerView() {
 				</div>
 			</div>`;
 		list.appendChild(item);
+	});
+}
+
+// ── Modal ghi nhận sự cố gắn thẳng với đơn (tạo từ trang Điều hành) ──────────
+const SUCO_LOAI = ["Hoàn hàng", "Giao một phần", "Hư hỏng, móp méo", "Chờ xử lý chứng từ", "Chậm, thất lạc", "Khách từ chối, sai địa chỉ", "Khác"];
+function openSuCoModal(siName) {
+	const inv = allInvoices.find((i) => i.name === siName) || { name: siName };
+	let modal = document.getElementById("rvhg-suco-modal");
+	if (!modal) {
+		modal = document.createElement("div");
+		modal.id = "rvhg-suco-modal";
+		modal.className = "rvhg-modal rvhg-detail";
+		document.getElementById("rvhg-app").appendChild(modal);
+		modal.addEventListener("click", (e) => {
+			if (e.target === modal || e.target.closest("[data-suco-close]")) modal.classList.remove("rvhg-show");
+		});
+	}
+	const loaiOpts = SUCO_LOAI.map((l) => `<option value="${escapeHtml(l)}">${escapeHtml(l)}</option>`).join("");
+	modal.innerHTML = `
+		<div class="rvhg-modal-inner" style="max-width:520px">
+			<div class="rvhg-detail-header"><div class="rvhg-detail-title">🚨 Ghi nhận sự cố</div><button class="rvhg-detail-close" type="button" data-suco-close>✕</button></div>
+			<div class="rvhg-detail-item" style="margin-bottom:14px"><div class="rvhg-detail-label">Đơn hàng</div>
+				<div class="rvhg-detail-value">${escapeHtml(siName)} — ${escapeHtml(inv.customer_name || inv.customer || "")}${inv.hinh_thuc ? " · " + escapeHtml(inv.hinh_thuc) : ""}</div></div>
+			<label class="rvhg-suco-label">Loại sự cố *</label>
+			<select id="rvhg-suco-loai" class="rvhg-suco-input">${loaiOpts}</select>
+			<div style="display:flex;gap:10px">
+				<div style="flex:1"><label class="rvhg-suco-label">Số kiện ảnh hưởng</label><input id="rvhg-suco-kien" class="rvhg-suco-input" type="number" min="0" step="1" /></div>
+				<div style="flex:1"><label class="rvhg-suco-label">Giá trị ảnh hưởng</label><input id="rvhg-suco-gt" class="rvhg-suco-input" type="number" min="0" step="1000" /></div>
+			</div>
+			<label class="rvhg-suco-label">Mô tả</label>
+			<textarea id="rvhg-suco-mota" class="rvhg-suco-input" style="min-height:64px;resize:vertical" placeholder="Diễn biến sự cố..."></textarea>
+			<label class="rvhg-suco-label">Người phụ trách</label>
+			<input id="rvhg-suco-npt" class="rvhg-suco-input" placeholder="Tên người xử lý" />
+			<div style="display:flex;gap:10px;margin-top:18px">
+				<button class="rvhg-btn rvhg-btn-gray" type="button" data-suco-close style="flex:1">Hủy</button>
+				<button class="rvhg-btn rvhg-btn-secondary" type="button" id="rvhg-suco-save" style="flex:1">🚨 Tạo sự cố</button>
+			</div>
+		</div>`;
+	modal.classList.add("rvhg-show");
+	const v = (id) => document.getElementById(id).value;
+	document.getElementById("rvhg-suco-save").addEventListener("click", async () => {
+		const btn = document.getElementById("rvhg-suco-save");
+		const payload = {
+			sales_invoice: siName,
+			loai_su_co: v("rvhg-suco-loai"),
+			so_kien_anh_huong: Number(v("rvhg-suco-kien")) || 0,
+			gia_tri_anh_huong: Number(v("rvhg-suco-gt")) || 0,
+			mo_ta: v("rvhg-suco-mota").trim(),
+			nguoi_phu_trach: v("rvhg-suco-npt").trim(),
+			trang_thai: "Mới",
+		};
+		btn.disabled = true;
+		btn.textContent = "Đang lưu...";
+		try {
+			await callMethod("vanchuyen.api.su_co.create_issue", { payload: JSON.stringify(payload) });
+			showToast("Đã ghi nhận sự cố cho " + siName, "success");
+			modal.classList.remove("rvhg-show");
+			inv.custom_co_su_co = 1; // gắn cờ tại chỗ để nút đổi màu ngay
+			renderManagerView();
+		} catch (e) {
+			console.error(e);
+			btn.disabled = false;
+			btn.textContent = "🚨 Tạo sự cố";
+			showToast("Lỗi tạo sự cố — kiểm tra Console", "error");
+		}
 	});
 }
 
@@ -1214,8 +1291,11 @@ function setupEventListeners() {
 	document.getElementById("rvhg-apply-advanced-btn").addEventListener("click", applyFilters);
 
 	let poDebounce = null;
-	document.getElementById("rvhg-filter-po-quick").addEventListener("input", () => { clearTimeout(poDebounce); poDebounce = setTimeout(applyFilters, 300); });
-	document.getElementById("rvhg-filter-po-quick").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); clearTimeout(poDebounce); applyFilters(); } });
+	const debApply = () => { clearTimeout(poDebounce); poDebounce = setTimeout(applyFilters, 300); };
+	["rvhg-filter-po-quick", "rvhg-filter-customer-quick", "rvhg-filter-address-quick"].forEach((id) => {
+		document.getElementById(id).addEventListener("input", debApply);
+		document.getElementById(id).addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); clearTimeout(poDebounce); applyFilters(); } });
+	});
 
 	document.getElementById("rvhg-btn-first").addEventListener("click", () => goToPage(1));
 	document.getElementById("rvhg-btn-prev").addEventListener("click", () => goToPage(currentPage - 1));
@@ -1228,6 +1308,8 @@ function setupEventListeners() {
 	document.getElementById("rvhg-detail-modal").addEventListener("click", (e) => { if (e.target.id === "rvhg-detail-modal") closeDetailModal(); });
 
 	document.getElementById("rvhg-invoice-list").addEventListener("click", (e) => {
+		const sucoBtn = e.target.closest('[data-action="suco"]');
+		if (sucoBtn) { e.stopPropagation(); openSuCoModal(sucoBtn.dataset.name); return; }
 		const detailBtn = e.target.closest('[data-action="detail"]');
 		if (detailBtn) { e.stopPropagation(); openDetailModal(detailBtn.dataset.name); return; }
 		const cb = e.target.closest('[data-action="checkbox"]');

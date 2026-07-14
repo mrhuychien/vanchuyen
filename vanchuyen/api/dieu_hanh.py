@@ -88,7 +88,9 @@ def get_invoices_dieu_phoi(filters=None, page=1, page_size=100):
 		       si.`custom_thể_tích_lô` AS the_tich_lo,
 		       si.`custom_hình_thức_vận_chuyển` AS hinh_thuc, si.`custom_xe` AS xe,
 		       si.`custom_tên_lái_xe` AS ten_lai_xe,
-		       si.`custom_trạng_thái_vận_chuyển` AS trang_thai_vc, si.`custom_po_` AS po
+		       si.`custom_trạng_thái_vận_chuyển` AS trang_thai_vc, si.`custom_po_` AS po,
+		       COALESCE(si.`custom_co_su_co`, 0) AS custom_co_su_co,
+		       si.`custom_su_co_tom_tat` AS su_co_tom_tat
 		FROM `tabSales Invoice` si
 		WHERE {where}
 		ORDER BY si.posting_date DESC, si.creation DESC
