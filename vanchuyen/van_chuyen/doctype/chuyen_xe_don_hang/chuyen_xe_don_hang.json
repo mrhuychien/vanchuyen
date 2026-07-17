@@ -20,11 +20,11 @@
   {
    "columns": 2,
    "fieldname": "sales_invoice",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Đơn hàng",
-   "options": "Sales Invoice",
-   "reqd": 1
+   "reqd": 1,
+   "description": "Số hoá đơn (Data, không phải Link) — để KẾ TOÁN vẫn hủy/sửa được hoá đơn dù đã lên chuyến. App vẫn tra cứu theo số hoá đơn này."
   },
   {
    "columns": 2,
