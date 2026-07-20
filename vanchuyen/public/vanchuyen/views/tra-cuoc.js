@@ -92,6 +92,25 @@ function vietQrUrl(bank, amount, content) {
 
 const WEEKDAYS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
 const pad = (n) => String(n).padStart(2, "0");
+const QR_CONTENT_MAX = 45; // dài hơn ngưỡng này thì viết tắt tên tỉnh cho gọn memo
+
+// Viết tắt tỉnh (ASCII, hợp memo ngân hàng). Không có trong map → lấy chữ cái đầu mỗi từ.
+const TINH_ABBR = {
+	"Hà Nội": "HN", "Hải Phòng": "HP", "Đà Nẵng": "DNg", "Hồ Chí Minh": "HCM", "TP Hồ Chí Minh": "HCM",
+	"Bắc Ninh": "BN", "Bắc Giang": "BG", "Nam Định": "ND", "Thái Bình": "TB", "Ninh Bình": "NB",
+	"Hà Nam": "HNam", "Hưng Yên": "HY", "Hải Dương": "HD", "Quảng Ninh": "QN", "Vĩnh Phúc": "VP",
+	"Phú Thọ": "PT", "Thái Nguyên": "TNg", "Bắc Kạn": "BK", "Cao Bằng": "CB", "Lạng Sơn": "LS",
+	"Tuyên Quang": "TQ", "Hà Giang": "HG", "Yên Bái": "YB", "Lào Cai": "LCai", "Lai Châu": "LC",
+	"Điện Biên": "DB", "Sơn La": "SL", "Hòa Bình": "HB", "Thanh Hóa": "TH", "Nghệ An": "NA",
+	"Hà Tĩnh": "HT", "Quảng Bình": "QB", "Quảng Trị": "QT",
+};
+function stripD(s) {
+	return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, (m) => (m === "Đ" ? "D" : "d"));
+}
+function abbrTinh(name) {
+	const a = TINH_ABBR[name] || String(name || "").trim().split(/\s+/).map((w) => w[0] || "").join("");
+	return stripD(a).toUpperCase();
+}
 
 let ROOT = null;
 const S = { nam: 0, thang: 0, selected: null, cal: {}, trips: [], dayFilter: "all" };
@@ -334,8 +353,11 @@ function tripCard(t) {
 		action = `<a class="vc-btn-ghost" href="/app/journal-entry/${encodeURIComponent(t.cuoc_je || "")}" target="_blank"><i class="fas fa-external-link-alt"></i> Xem bút toán</a>`;
 	} else {
 		// QR hiện SẴN theo tổng cước hiện tại (không cần bấm).
-		// Nội dung chuyển khoản: ngày · mã chuyến · tỉnh các đơn trong chuyến.
-		const noiDung = `${formatDate(t.ngay_giao)} ${t.name}${t.tinh ? " " + t.tinh : ""}`.trim();
+		// Nội dung chuyển khoản: ngày · mã chuyến · tỉnh các đơn. Dài → viết tắt tên tỉnh.
+		const tinhs = (t.tinh || "").split(",").map((s) => s.trim()).filter(Boolean);
+		const head = `${formatDate(t.ngay_giao)} ${t.name}`;
+		let noiDung = tinhs.length ? `${head} ${tinhs.join(", ")}` : head;
+		if (noiDung.length > QR_CONTENT_MAX && tinhs.length) noiDung = `${head} ${tinhs.map(abbrTinh).join(" ")}`;
 		const qrUrl = t.bank && t.bank.stk ? vietQrUrl(t.bank, Number(t.tong_cuoc) || 0, noiDung) : "";
 		const qrBlock = qrUrl
 			? `<div class="tc-qr"><img src="${escapeHtml(qrUrl)}" alt="QR trả cước" loading="lazy" /><a href="${escapeHtml(qrUrl)}" target="_blank">Phóng to QR ⤢</a></div>`
