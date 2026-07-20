@@ -334,7 +334,9 @@ function tripCard(t) {
 		action = `<a class="vc-btn-ghost" href="/app/journal-entry/${encodeURIComponent(t.cuoc_je || "")}" target="_blank"><i class="fas fa-external-link-alt"></i> Xem bút toán</a>`;
 	} else {
 		// QR hiện SẴN theo tổng cước hiện tại (không cần bấm).
-		const qrUrl = t.bank && t.bank.stk ? vietQrUrl(t.bank, Number(t.tong_cuoc) || 0, `Cuoc ${t.name} ${t.ten_lai_xe || ""}`.trim()) : "";
+		// Nội dung chuyển khoản: ngày · mã chuyến · tỉnh các đơn trong chuyến.
+		const noiDung = `${formatDate(t.ngay_giao)} ${t.name}${t.tinh ? " " + t.tinh : ""}`.trim();
+		const qrUrl = t.bank && t.bank.stk ? vietQrUrl(t.bank, Number(t.tong_cuoc) || 0, noiDung) : "";
 		const qrBlock = qrUrl
 			? `<div class="tc-qr"><img src="${escapeHtml(qrUrl)}" alt="QR trả cước" loading="lazy" /><a href="${escapeHtml(qrUrl)}" target="_blank">Phóng to QR ⤢</a></div>`
 			: "";

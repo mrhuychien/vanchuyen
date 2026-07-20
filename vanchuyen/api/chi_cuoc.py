@@ -133,7 +133,7 @@ def get_trips_for_pay(ngay):
 		"Chuyen Xe",
 		filters={"docstatus": 1, "ngay_giao": getdate(ngay)},
 		fields=[
-			"name", "lai_xe", "ten_lai_xe", "sdt_lai_xe", "xe", "trang_thai",
+			"name", "ngay_giao", "lai_xe", "ten_lai_xe", "sdt_lai_xe", "xe", "trang_thai",
 			"tong_cuoc", "cuoc_thu_cong", "da_tra_cuoc", "cuoc_je",
 		],
 		order_by="creation asc",
@@ -143,14 +143,21 @@ def get_trips_for_pay(ngay):
 
 	names = [t.name for t in trips]
 	stops_by = {}
+	tinh_by = {}  # parent -> danh sách tỉnh (giữ thứ tự, không trùng) cho nội dung QR
 	for r in frappe.db.sql(
-		"""SELECT parent, khach_hang, dia_chi, so_po, so_kien
-		   FROM `tabChuyen Xe Don Hang` WHERE parent IN %(n)s ORDER BY parent, idx""",
+		"""SELECT cxd.parent, cxd.khach_hang, cxd.dia_chi, cxd.so_po, cxd.so_kien,
+		          si.`custom_tỉnh` AS tinh
+		   FROM `tabChuyen Xe Don Hang` cxd
+		   LEFT JOIN `tabSales Invoice` si ON si.name = cxd.sales_invoice
+		   WHERE cxd.parent IN %(n)s ORDER BY cxd.parent, cxd.idx""",
 		{"n": names}, as_dict=True,
 	):
 		stops_by.setdefault(r.parent, []).append(
-			{"khach_hang": r.khach_hang, "dia_chi": r.dia_chi, "so_po": r.so_po, "so_kien": flt(r.so_kien)}
+			{"khach_hang": r.khach_hang, "dia_chi": r.dia_chi, "so_po": r.so_po, "so_kien": flt(r.so_kien), "tinh": r.tinh}
 		)
+		lst = tinh_by.setdefault(r.parent, [])
+		if r.tinh and r.tinh not in lst:
+			lst.append(r.tinh)
 
 	# TK ngân hàng lái xe (field đã có sẵn trên Driver).
 	drivers = list({t.lai_xe for t in trips if t.lai_xe})
@@ -168,6 +175,8 @@ def get_trips_for_pay(ngay):
 		out.append(
 			{
 				"name": t.name,
+				"ngay_giao": str(t.ngay_giao) if t.ngay_giao else None,
+				"tinh": ", ".join(tinh_by.get(t.name, [])),
 				"lai_xe": t.lai_xe,
 				"ten_lai_xe": t.ten_lai_xe or (d.get("full_name") if d else ""),
 				"sdt_lai_xe": t.sdt_lai_xe or (d.get("cell_number") if d else ""),
