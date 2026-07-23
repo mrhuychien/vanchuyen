@@ -1216,6 +1216,7 @@ function renderManagerView() {
 						<div class="rvhg-invoice-info">
 							<div class="rvhg-invoice-id"><span>${escapeHtml(invoice.name)}</span>${typeBadge}${statusBadge}${poBadge}</div>
 							<div class="rvhg-invoice-customer">${escapeHtml(invoice.customer || "N/A")}</div>
+							${invoice.shipping_address_name ? `<div class="rvhg-invoice-meta">🏪 ${escapeHtml(invoice.shipping_address_name)}</div>` : ""}
 							<div class="rvhg-invoice-meta-address">📍 ${escapeHtml(cleanAddr(invoice.shipping_address, invoice[F.tinh]) || invoice.shipping_address_name || "")}</div>
 						</div>
 						<div class="rvhg-invoice-stats">
