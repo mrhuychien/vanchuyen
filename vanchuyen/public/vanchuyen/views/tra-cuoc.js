@@ -130,9 +130,12 @@ const CSS = `
 .tc-day-dot { position:absolute; top:3px; right:3px; width:6px; height:6px; border-radius:50%; background:#ef4444; }
 .tc-cal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
 .tc-nav { width:30px; height:30px; border-radius:8px; border:1px solid var(--vc-border,#e5e7eb); background:#fff; cursor:pointer; font-size:.85rem; }
-.tc-qr { text-align:center; margin:.5rem 0; }
-.tc-qr img { width:148px; height:148px; background:#fff; border:1px solid var(--vc-border,#e5e7eb); border-radius:10px; padding:5px; }
-.tc-qr a { display:block; font-size:.72rem; margin-top:.2rem; color:#6366f1; text-decoration:none; }
+.tc-card-flex { display:flex; gap:1rem; align-items:flex-start; }
+.tc-card-main { flex:1; min-width:0; }
+.tc-card-qr { flex-shrink:0; text-align:center; }
+.tc-card-qr img { width:184px; height:184px; background:#fff; border:1px solid var(--vc-border,#e5e7eb); border-radius:10px; padding:6px; display:block; }
+.tc-card-qr a { display:block; font-size:.72rem; margin-top:.3rem; color:#6366f1; text-decoration:none; }
+@media (max-width:560px){ .tc-card-flex{ flex-direction:column; align-items:stretch; } .tc-card-qr{ align-self:center; } }
 .tc-orders { margin:.4rem 0; padding:.5rem .6rem; background:var(--vc-gray-50,#f9fafb); border-radius:8px; font-size:.8rem; }
 .tc-order { display:flex; justify-content:space-between; gap:8px; padding:2px 0; }
 .tc-order-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -349,18 +352,19 @@ function tripCard(t) {
 		: '<span class="vc-text-danger">⚠ Lái xe chưa có TK ngân hàng</span>';
 
 	let action = "";
+	let qrAside = "";
 	if (paid) {
 		action = `<a class="vc-btn-ghost" href="/app/journal-entry/${encodeURIComponent(t.cuoc_je || "")}" target="_blank"><i class="fas fa-external-link-alt"></i> Xem bút toán</a>`;
 	} else {
-		// QR hiện SẴN theo tổng cước hiện tại (không cần bấm).
+		// QR hiện SẴN theo tổng cước hiện tại (không cần bấm), đặt gọn CẠNH phần thông tin.
 		// Nội dung chuyển khoản: ngày · mã chuyến · tỉnh các đơn. Dài → viết tắt tên tỉnh.
 		const tinhs = (t.tinh || "").split(",").map((s) => s.trim()).filter(Boolean);
 		const head = `${formatDate(t.ngay_giao)} ${t.name}`;
 		let noiDung = tinhs.length ? `${head} ${tinhs.join(", ")}` : head;
 		if (noiDung.length > QR_CONTENT_MAX && tinhs.length) noiDung = `${head} ${tinhs.map(abbrTinh).join(" ")}`;
 		const qrUrl = t.bank && t.bank.stk ? vietQrUrl(t.bank, Number(t.tong_cuoc) || 0, noiDung) : "";
-		const qrBlock = qrUrl
-			? `<div class="tc-qr"><img src="${escapeHtml(qrUrl)}" alt="QR trả cước" loading="lazy" /><a href="${escapeHtml(qrUrl)}" target="_blank">Phóng to QR ⤢</a></div>`
+		qrAside = qrUrl
+			? `<div class="tc-card-qr"><img src="${escapeHtml(qrUrl)}" alt="QR trả cước" loading="lazy" /><a href="${escapeHtml(qrUrl)}" target="_blank">Phóng to QR ⤢</a></div>`
 			: "";
 		action =
 			`<div class="tc-cuoc-row">
@@ -368,23 +372,27 @@ function tripCard(t) {
 				<button class="vc-btn-ghost" data-savecuoc="${escapeHtml(t.name)}">Lưu &amp; cập nhật QR</button>
 				${t.cuoc_thu_cong ? '<span class="vc-badge vc-badge-muted">sửa tay</span>' : ""}
 			</div>
-			${qrBlock}
 			<button class="vc-btn-success vc-btn-block" data-pay="${escapeHtml(t.name)}"><i class="fas fa-check"></i> Tạo bút toán</button>`;
 	}
 
 	return `
 	<div class="vc-order-card ${paid ? "tc-paid" : ""}" data-trip="${escapeHtml(t.name)}">
-		<div class="vc-order-head">
-			<div>
-				<div class="vc-order-cust">${escapeHtml(t.ten_lai_xe || t.lai_xe || "")} · 🚛 ${escapeHtml(t.xe || "")}</div>
-				<div class="vc-order-addr">${escapeHtml(t.name)} · ${escapeHtml(t.sdt_lai_xe || "")}</div>
+		<div class="tc-card-flex">
+			<div class="tc-card-main">
+				<div class="vc-order-head">
+					<div>
+						<div class="vc-order-cust">${escapeHtml(t.ten_lai_xe || t.lai_xe || "")} · 🚛 ${escapeHtml(t.xe || "")}</div>
+						<div class="vc-order-addr">${escapeHtml(t.name)} · ${escapeHtml(t.sdt_lai_xe || "")}</div>
+					</div>
+					${badge}
+				</div>
+				<div class="tc-orders">${orders || '<span class="vc-text-muted">— không có đơn —</span>'}</div>
+				<div class="vc-text-sm vc-text-muted vc-mb-2">💳 ${bankLine}</div>
+				<div style="font-weight:800;font-size:1.05rem;margin-bottom:.3rem">Cước: ${formatCurrency(t.tong_cuoc)}</div>
+				${action}
 			</div>
-			${badge}
+			${qrAside}
 		</div>
-		<div class="tc-orders">${orders || '<span class="vc-text-muted">— không có đơn —</span>'}</div>
-		<div class="vc-text-sm vc-text-muted vc-mb-2">💳 ${bankLine}</div>
-		<div style="font-weight:800;font-size:1.05rem;margin-bottom:.3rem">Cước: ${formatCurrency(t.tong_cuoc)}</div>
-		${action}
 	</div>`;
 }
 
