@@ -6,12 +6,13 @@ import { escapeHtml, formatDate, formatCurrency } from "../lib/format.js";
 import { showToast } from "../components/toast.js";
 import { showModal, closeModal } from "../components/modal.js";
 
-const LOAI = ["Hoàn hàng", "Giao một phần", "Hư hỏng, móp méo", "Chờ xử lý chứng từ", "Chậm, thất lạc", "Khách từ chối, sai địa chỉ", "Khác"];
+const LOAI = ["Hoàn hàng", "Giao một phần", "Hư hỏng, móp méo", "Chờ xử lý chứng từ", "Chậm, thất lạc", "Khách từ chối, sai địa chỉ", "Hàng date / thời vụ", "Giao nhầm", "Hàng lỗi nhà sản xuất", "Khác"];
 const TRANG_THAI = ["Mới", "Đang xử lý", "Đã xử lý", "Đóng"];
 const HUONG = ["", "Giao lại", "Hoàn toàn bộ", "Giao một phần", "Bồi thường", "Giảm trừ công nợ", "Hủy đơn", "Khác"];
 const LOAI_ICON = {
 	"Hoàn hàng": "↩️", "Giao một phần": "📦", "Hư hỏng, móp méo": "💥",
-	"Chờ xử lý chứng từ": "📄", "Chậm, thất lạc": "🐢", "Khách từ chối, sai địa chỉ": "🚫", "Khác": "❔",
+	"Chờ xử lý chứng từ": "📄", "Chậm, thất lạc": "🐢", "Khách từ chối, sai địa chỉ": "🚫",
+	"Hàng date / thời vụ": "📅", "Giao nhầm": "🔀", "Hàng lỗi nhà sản xuất": "🏭", "Khác": "❔",
 };
 function ttBadge(tt) {
 	const c = tt === "Mới" ? "vc-badge-danger" : tt === "Đang xử lý" ? "vc-badge-warning" : "vc-badge-success";
@@ -19,7 +20,7 @@ function ttBadge(tt) {
 }
 
 let ROOT = null;
-const S = { filter: "open", tim: "", data: { rows: [], counts: {} }, selSi: null };
+const S = { filter: "open", tim: "", page: 1, data: { rows: [], counts: {} }, selSi: null };
 
 export async function render({ container }) {
 	ROOT = container;
@@ -44,6 +45,7 @@ export async function render({ container }) {
 		clearTimeout(t);
 		t = setTimeout(() => {
 			S.tim = e.target.value.trim();
+			S.page = 1;
 			load();
 		}, 300);
 	});
@@ -57,10 +59,18 @@ function pill(label, key, n) {
 async function load() {
 	const list = document.getElementById("sc-list");
 	list.innerHTML = skeleton(90, 3);
-	const args = { tim: S.tim || undefined };
-	if (S.filter !== "all" && S.filter !== "open") args.trang_thai = S.filter;
+	// Lọc "đang mở" đi qua SERVER (dang_mo), không lọc trên trang đã tải: từ khi
+	// phiếu có vòng đời hàng-về, số phiếu mở vượt 30 nên lọc client sẽ giấu mất
+	// đúng những phiếu cũ nhất — nhóm đáng lo nhất.
+	const args = { tim: S.tim || undefined, page: S.page, page_size: 30 };
+	if (S.filter === "open") args.dang_mo = 1;
+	else if (S.filter !== "all") args.trang_thai = S.filter;
 	try {
-		S.data = await call("vanchuyen.api.su_co.list_issues", args);
+		const res = await call("vanchuyen.api.su_co.list_issues", args);
+		// Trang > 1 là NỐI THÊM, không thay. Nút ghi "Xem tiếp (đã hiện 30/47)"
+		// mà bấm vào lại mất 30 dòng đầu thì người dùng tưởng dữ liệu hỏng.
+		if (S.page > 1) res.rows = (S.data.rows || []).concat(res.rows || []);
+		S.data = res;
 	} catch (e) {
 		list.innerHTML = `<div class="vc-empty"><div class="vc-empty-icon">⚠️</div><div class="vc-empty-title">Không tải được</div><p class="vc-text-muted">${escapeHtml(errText(e))}</p></div>`;
 		return;
@@ -81,21 +91,28 @@ function drawPills() {
 	box.querySelectorAll("[data-f]").forEach((b) =>
 		b.addEventListener("click", () => {
 			S.filter = b.dataset.f;
+			S.page = 1;
 			load();
 		})
 	);
 }
 
 function drawList() {
-	let rows = S.data.rows || [];
-	if (S.filter === "open") rows = rows.filter((r) => r.trang_thai === "Mới" || r.trang_thai === "Đang xử lý");
+	// KHÔNG lọc lại ở đây: server đã lọc. Lọc thêm một lần nữa trên trang đã tải
+	// là cách cũ, và nó làm pill hiện 47 trong khi chỉ vẽ 12 thẻ.
+	const rows = S.data.rows || [];
 	const list = document.getElementById("sc-list");
 	if (!rows.length) {
 		list.innerHTML = `<div class="vc-empty"><div class="vc-empty-icon">✅</div><div class="vc-empty-title">Không có sự cố${S.filter === "open" ? " đang mở" : ""}</div></div>`;
 		return;
 	}
-	list.innerHTML = `<div class="vc-list">${rows.map(card).join("")}</div>`;
+	const more = S.data.has_more
+		? `<button class="vc-btn-ghost vc-btn-block vc-mt-2" id="sc-more">Xem tiếp (đã hiện ${rows.length}/${S.data.total})</button>`
+		: "";
+	list.innerHTML = `<div class="vc-list">${rows.map(card).join("")}</div>${more}`;
 	list.querySelectorAll("[data-upd]").forEach((b) => b.addEventListener("click", () => openUpdate(b.dataset.upd)));
+	const mb = document.getElementById("sc-more");
+	if (mb) mb.addEventListener("click", () => { S.page += 1; load(); });
 }
 
 function card(r) {
@@ -129,12 +146,17 @@ function card(r) {
 function openCreate() {
 	S.selSi = null;
 	const loaiOpts = LOAI.map((l) => `<option value="${escapeHtml(l)}">${escapeHtml(l)}</option>`).join("");
+	const huongOpts = HUONG.map((h) => `<option value="${escapeHtml(h)}">${h ? escapeHtml(h) : "— chưa chọn —"}</option>`).join("");
 	const body = `
 		<div class="vc-field"><label>Tìm đơn (giao qua đơn vị VC)</label>
 			<input class="vc-input" id="sc-si-q" placeholder="Mã đơn / khách / PO..." autocomplete="off" /></div>
 		<div id="sc-si-res" class="vc-mb-2"></div>
 		<div id="sc-si-chosen" class="vc-mb-2"></div>
 		<div class="vc-field"><label>Loại sự cố *</label><select class="vc-input" id="sc-loai">${loaiOpts}</select></div>
+		<div class="vc-field"><label>Hướng xử lý</label><select class="vc-input" id="sc-huong">${huongOpts}</select>
+			<div class="vc-text-sm vc-text-muted vc-mt-1">Quyết định chứng từ kế toán phải làm. Để trống thì phiếu nằm ở rổ "chưa phân loại" bên kế toán.</div></div>
+		<div class="vc-field"><label>Ngày xảy ra *</label><input class="vc-input" id="sc-ngay" type="date" />
+			<div class="vc-text-sm vc-text-muted vc-mt-1">Ngày sự việc xảy ra ở điểm giao, KHÔNG phải hôm nay. Nhà xe báo trễ thì sửa lùi lại.</div></div>
 		<div class="vc-flex vc-gap-2" style="flex-wrap:wrap">
 			<div class="vc-field" style="flex:1;min-width:120px"><label>Số kiện ảnh hưởng</label><input class="vc-input" id="sc-kien" type="number" min="0" step="1" /></div>
 			<div class="vc-field" style="flex:1;min-width:120px"><label>Giá trị ảnh hưởng</label><input class="vc-input" id="sc-gt" type="number" min="0" step="1000" /></div>
@@ -145,6 +167,7 @@ function openCreate() {
 	const content = showModal({ title: "Ghi nhận sự cố", body, footer });
 	if (!content) return;
 	const q = (id) => content.querySelector("#" + id);
+	q("sc-ngay").value = new Date().toISOString().slice(0, 10);
 
 	let tt = null;
 	q("sc-si-q").addEventListener("input", (e) => {
@@ -182,8 +205,11 @@ function openCreate() {
 			gia_tri_anh_huong: Number(q("sc-gt").value) || 0,
 			mo_ta: q("sc-mota").value.trim(),
 			nguoi_phu_trach: q("sc-npt").value.trim(),
+			huong_xu_ly: q("sc-huong").value,
+			ngay_phat_sinh: q("sc-ngay").value,
 			trang_thai: "Mới",
 		};
+		if (!payload.ngay_phat_sinh) { showToast("Chọn ngày xảy ra", "warning"); return; }
 		const btn = q("sc-save");
 		btn.disabled = true;
 		try {

@@ -1235,7 +1235,10 @@ function renderManagerView() {
 }
 
 // ── Modal ghi nhận sự cố gắn thẳng với đơn (tạo từ trang Điều hành) ──────────
-const SUCO_LOAI = ["Hoàn hàng", "Giao một phần", "Hư hỏng, móp méo", "Chờ xử lý chứng từ", "Chậm, thất lạc", "Khách từ chối, sai địa chỉ", "Khác"];
+// ⚠ PHẢI KHỚP `LOAI` trong views/su-co.js và options `loai_su_co` của DocType.
+// Lệch một giá trị là điều phối chọn được ở màn này mà màn kia không hiện ra.
+const SUCO_LOAI = ["Hoàn hàng", "Giao một phần", "Hư hỏng, móp méo", "Chờ xử lý chứng từ", "Chậm, thất lạc", "Khách từ chối, sai địa chỉ", "Hàng date / thời vụ", "Giao nhầm", "Hàng lỗi nhà sản xuất", "Khác"];
+const SUCO_HUONG = ["", "Giao lại", "Hoàn toàn bộ", "Giao một phần", "Bồi thường", "Giảm trừ công nợ", "Hủy đơn", "Khác"];
 function openSuCoModal(siName) {
 	const inv = allInvoices.find((i) => i.name === siName) || { name: siName };
 	let modal = document.getElementById("rvhg-suco-modal");
@@ -1249,6 +1252,8 @@ function openSuCoModal(siName) {
 		});
 	}
 	const loaiOpts = SUCO_LOAI.map((l) => `<option value="${escapeHtml(l)}">${escapeHtml(l)}</option>`).join("");
+	const huongOpts = SUCO_HUONG.map((h) => `<option value="${escapeHtml(h)}">${h ? escapeHtml(h) : "— chưa chọn —"}</option>`).join("");
+	const homNay = new Date().toISOString().slice(0, 10);
 	modal.innerHTML = `
 		<div class="rvhg-modal-inner" style="max-width:520px">
 			<div class="rvhg-detail-header"><div class="rvhg-detail-title">🚨 Ghi nhận sự cố</div><button class="rvhg-detail-close" type="button" data-suco-close>✕</button></div>
@@ -1256,6 +1261,10 @@ function openSuCoModal(siName) {
 				<div class="rvhg-detail-value">${escapeHtml(siName)} — ${escapeHtml(inv.customer_name || inv.customer || "")}${inv.hinh_thuc ? " · " + escapeHtml(inv.hinh_thuc) : ""}</div></div>
 			<label class="rvhg-suco-label">Loại sự cố *</label>
 			<select id="rvhg-suco-loai" class="rvhg-suco-input">${loaiOpts}</select>
+			<label class="rvhg-suco-label">Hướng xử lý</label>
+			<select id="rvhg-suco-huong" class="rvhg-suco-input">${huongOpts}</select>
+			<label class="rvhg-suco-label">Ngày xảy ra *</label>
+			<input id="rvhg-suco-ngay" class="rvhg-suco-input" type="date" value="${homNay}" />
 			<div style="display:flex;gap:10px">
 				<div style="flex:1"><label class="rvhg-suco-label">Số kiện ảnh hưởng</label><input id="rvhg-suco-kien" class="rvhg-suco-input" type="number" min="0" step="1" /></div>
 				<div style="flex:1"><label class="rvhg-suco-label">Giá trị ảnh hưởng</label><input id="rvhg-suco-gt" class="rvhg-suco-input" type="number" min="0" step="1000" /></div>
@@ -1280,8 +1289,11 @@ function openSuCoModal(siName) {
 			gia_tri_anh_huong: Number(v("rvhg-suco-gt")) || 0,
 			mo_ta: v("rvhg-suco-mota").trim(),
 			nguoi_phu_trach: v("rvhg-suco-npt").trim(),
+			huong_xu_ly: v("rvhg-suco-huong"),
+			ngay_phat_sinh: v("rvhg-suco-ngay"),
 			trang_thai: "Mới",
 		};
+		if (!payload.ngay_phat_sinh) { showToast("Chọn ngày xảy ra", "warning"); return; }
 		btn.disabled = true;
 		btn.textContent = "Đang lưu...";
 		try {

@@ -14,10 +14,32 @@ from vanchuyen.api.guards import is_admin
 # Hình thức KHÔNG phải đơn vị VC (tự ship / bốc tại kho / chưa gán) → loại khỏi pool sự cố.
 SELF_FORMS = ("Tự vận chuyển", "Xe vào bốc", "Chưa phân công")
 
+# Trạng thái coi là ĐÃ ĐÓNG. Lấy từ controller để hai nơi không lệch nhau.
+from vanchuyen.van_chuyen.doctype.su_co_van_chuyen.su_co_van_chuyen import DONG as DONG_TRANG_THAI
+
+# ⚠ THÊM FIELD MỚI PHẢI THÊM VÀO ĐÂY. Field không có trong tuple này thì
+# `create_issue`/`update_issue` BỎ QUA IM LẶNG — không lỗi, không cảnh báo, chỉ
+# là dữ liệu người dùng gõ xong bấm lưu rồi biến mất.
 _UPDATABLE = (
 	"loai_su_co", "trang_thai", "ngay_phat_sinh", "so_kien_anh_huong", "gia_tri_anh_huong",
 	"mo_ta", "huong_xu_ly", "nguoi_phu_trach", "ghi_chu_xu_ly",
+	# hàng quay về
+	"hang_ve_trang_thai", "ngay_du_kien_ve", "ngay_hang_ve", "stock_entry",
+	# bồi thường nhà xe — CHỈ THỐNG KÊ, đòi riêng, không sinh bút toán
+	"boi_thuong_trang_thai", "boi_thuong_so_tien", "boi_thuong_ghi_chu",
 )
+
+# Field đọc ra cho portal. Tách hằng để `_issue_dict` và `list_issues` không lệch
+# nhau — lệch một field là màn danh sách thiếu cột mà màn chi tiết vẫn có.
+_READ_FIELDS = (
+	"name", "sales_invoice", "customer", "hinh_thuc", "po", "tinh", "ngay_phat_sinh",
+	"loai_su_co", "trang_thai", "so_kien_anh_huong", "gia_tri_anh_huong", "mo_ta",
+	"dinh_kem", "huong_xu_ly", "nguoi_phu_trach", "ngay_dong", "ghi_chu_xu_ly",
+	"hang_ve_trang_thai", "ngay_du_kien_ve", "ngay_hang_ve", "stock_entry",
+	"tong_mat_duong", "boi_thuong_trang_thai", "boi_thuong_so_tien", "boi_thuong_ghi_chu",
+)
+
+_DATE_FIELDS = ("ngay_phat_sinh", "ngay_dong", "ngay_du_kien_ve", "ngay_hang_ve")
 
 
 def _require():
@@ -26,27 +48,41 @@ def _require():
 
 
 def _issue_dict(name):
-	d = frappe.db.get_value(
-		"Su Co Van Chuyen", name,
-		["name", "sales_invoice", "customer", "hinh_thuc", "po", "tinh", "ngay_phat_sinh",
-		 "loai_su_co", "trang_thai", "so_kien_anh_huong", "gia_tri_anh_huong", "mo_ta",
-		 "dinh_kem", "huong_xu_ly", "nguoi_phu_trach", "ngay_dong", "ghi_chu_xu_ly"],
-		as_dict=True,
-	)
+	d = frappe.db.get_value("Su Co Van Chuyen", name, list(_READ_FIELDS), as_dict=True)
 	if d:
-		d["ngay_phat_sinh"] = str(d.ngay_phat_sinh) if d.ngay_phat_sinh else None
-		d["ngay_dong"] = str(d.ngay_dong) if d.ngay_dong else None
+		for f in _DATE_FIELDS:
+			d[f] = str(d[f]) if d.get(f) else None
+		d["items"] = frappe.get_all(
+			"Su Co Hang Ve", filters={"parent": name, "parenttype": "Su Co Van Chuyen"},
+			fields=["name", "item_code", "item_name", "uom", "sl_tra", "sl_ve",
+				"sl_nhap_lai", "sl_hong", "don_gia", "tien_mat_duong", "idx"],
+			order_by="idx",
+		)
 	return d
 
 
 @frappe.whitelist()
-def list_issues(trang_thai=None, loai_su_co=None, hinh_thuc=None, tim=None, page=1, page_size=30):
-	"""Danh sách sự cố, lọc theo trạng thái/loại/đơn vị VC + tìm theo đơn/khách/PO."""
+def list_issues(trang_thai=None, loai_su_co=None, hinh_thuc=None, tim=None, page=1, page_size=30,
+		dang_mo=None):
+	"""Danh sách sự cố, lọc theo trạng thái/loại/đơn vị VC + tìm theo đơn/khách/PO.
+
+	`dang_mo=1` lọc NGAY TRÊN SERVER các phiếu chưa đóng.
+
+	VÌ SAO phải lọc ở server: bản cũ trả 30 dòng mới nhất rồi để portal tự lọc
+	"đang mở" trên đúng 30 dòng đó. Từ khi phiếu có thêm vòng đời hàng-về (Chưa
+	về -> Đang về -> Đã về sân -> Đã lọc xong), một phiếu sống vài tuần chứ không
+	vài ngày, nên số phiếu đang mở vượt 30 là chắc chắn. Khi đó ĐÚNG những phiếu
+	CŨ NHẤT còn mở — nhóm đáng lo nhất, hàng đi lâu chưa về — rơi khỏi trang 1 và
+	không ai mở tới được, trong khi pill vẫn hiện tổng đúng. Lọc client trên một
+	trang là cách chắc chắn nhất để giấu mất việc.
+	"""
 	_require()
 	page = cint(page) or 1
 	page_size = min(cint(page_size) or 30, 100)
 	filters = {}
-	if trang_thai:
+	if cint(dang_mo):
+		filters["trang_thai"] = ["not in", DONG_TRANG_THAI]
+	elif trang_thai:
 		filters["trang_thai"] = trang_thai
 	if loai_su_co:
 		filters["loai_su_co"] = loai_su_co
@@ -61,9 +97,7 @@ def list_issues(trang_thai=None, loai_su_co=None, hinh_thuc=None, tim=None, page
 		]
 	rows = frappe.get_all(
 		"Su Co Van Chuyen", filters=filters, or_filters=or_filters,
-		fields=["name", "sales_invoice", "customer", "hinh_thuc", "po", "tinh", "ngay_phat_sinh",
-			"loai_su_co", "trang_thai", "so_kien_anh_huong", "gia_tri_anh_huong", "mo_ta",
-			"dinh_kem", "huong_xu_ly", "nguoi_phu_trach", "ngay_dong", "ghi_chu_xu_ly"],
+		fields=list(_READ_FIELDS),
 		order_by="ngay_phat_sinh desc, modified desc",
 		start=(page - 1) * page_size, page_length=page_size,
 	)
@@ -71,13 +105,15 @@ def list_issues(trang_thai=None, loai_su_co=None, hinh_thuc=None, tim=None, page
 	_rank = {"Mới": 0, "Đang xử lý": 1, "Đã xử lý": 2, "Đóng": 3}
 	rows.sort(key=lambda r: _rank.get(r.get("trang_thai"), 9))
 	for r in rows:
-		r["ngay_phat_sinh"] = str(r["ngay_phat_sinh"]) if r.get("ngay_phat_sinh") else None
-		r["ngay_dong"] = str(r["ngay_dong"]) if r.get("ngay_dong") else None
+		for f in _DATE_FIELDS:
+			r[f] = str(r[f]) if r.get(f) else None
 	total = frappe.db.count("Su Co Van Chuyen", filters or None)
+	has_more = (page - 1) * page_size + len(rows) < cint(total)
 	# Đếm theo trạng thái (cho pill filter).
 	counts = {c.trang_thai: cint(c.n) for c in frappe.db.sql(
 		"SELECT trang_thai, COUNT(*) AS n FROM `tabSu Co Van Chuyen` GROUP BY trang_thai", as_dict=True)}
-	return {"rows": rows, "total": cint(total), "page": page, "counts": counts}
+	return {"rows": rows, "total": cint(total), "page": page, "page_size": page_size,
+		"has_more": has_more, "counts": counts}
 
 
 @frappe.whitelist()
