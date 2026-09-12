@@ -9,7 +9,7 @@ from frappe import _
 from frappe.utils import cint, flt
 
 from vanchuyen.api.guards import require_dieu_phoi
-from vanchuyen.van_chuyen.doctype.chuyen_xe.chuyen_xe import _format_dia_chi, da_xep
+from vanchuyen.van_chuyen.doctype.chuyen_xe.chuyen_xe import _format_dia_chi, da_xep, da_giu_nguyen_lo
 
 
 @frappe.whitelist()
@@ -76,6 +76,16 @@ def get_pool(tu_ngay=None, den_ngay=None, tinh=None, tim=None, page=1, page_size
 		xep = da_xep(r.name)
 		con = tong - xep
 		the_tich_lo = flt(r.the_tich_lo_cm3) / 1_000_000.0
+		# Đơn không định lượng được bằng kiện -> đi NGUYÊN LÔ. Khái niệm khai ở
+		# chuyen_xe.la_lo_nguyen; ở đây chỉ tính lại từ `tong` đã có sẵn trong
+		# vòng lặp để không bắn thêm một truy vấn cho mỗi dòng pool.
+		nguyen_lo = tong <= 0
+		# Lô nguyên nằm trên chuyến NHÁP thì `reconcile` chưa chạy (chỉ chạy ở
+		# submit/cancel/complete), nên nó vẫn còn trong pool và `con_lai` = 0 y
+		# hệt lúc chưa xếp — không có gì phân biệt. Hỏi thêm đúng MỘT truy vấn,
+		# và chỉ cho loại đơn hiếm này, để màn hình nói được "đã nằm ở chuyến
+		# khác" thay vì để người dùng bấm rồi ăn throw lúc lưu.
+		dang_giu = da_giu_nguyen_lo(r.name) if nguyen_lo else False
 		out.append(
 			{
 				"name": r.name,
@@ -88,7 +98,12 @@ def get_pool(tu_ngay=None, den_ngay=None, tinh=None, tim=None, page=1, page_size
 				"the_tich_lo": the_tich_lo,
 				"da_xep": xep,
 				"con_lai": con,
-				"the_tich_con_lai": (the_tich_lo * con / tong) if tong > 0 else 0.0,
+				# Lô nguyên: TRỌN thể tích lô, không pro-rata. Bản cũ trả 0.0 —
+				# guard chống chia-0 nuốt luôn giá trị thật, nên màn hình ghi
+				# "0 m³" cho một lô vẫn chiếm chỗ thật trên xe.
+				"nguyen_lo": 1 if nguyen_lo else 0,
+				"dang_giu": 1 if dang_giu else 0,
+				"the_tich_con_lai": the_tich_lo if nguyen_lo else (the_tich_lo * con / tong),
 				"gui_xe": cint(r.gui_xe),
 				"ghi_chu_npp": r.ghi_chu_npp,
 				"ghi_chu_giao": r.ghi_chu_giao,
@@ -202,6 +217,7 @@ def _trip_dict(doc):
 				"tong_kien": tong,
 				"the_tich_lo": the_tich_lo,
 				"con_lai": con_lai_row,
+				"nguyen_lo": 1 if (si and tong <= 0) else 0,
 				"gui_xe": gui_xe_si,
 			}
 		)

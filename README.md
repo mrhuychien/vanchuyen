@@ -41,4 +41,10 @@ bench restart
 python3 -m py_compile vanchuyen/**/*.py
 for f in vanchuyen/public/vanchuyen/**/*.js; do node --check "$f"; done
 python3 .claude/skills/nextcode-build/references/validate_shipped_docs.py apps/vanchuyen/vanchuyen
+python3 docs/verified/lo_nguyen_check.py     # lô nguyên (0 kiện + hộp lẻ) — chạy KHÔNG cần bench
 ```
+
+`docs/verified/` là bộ kiểm chạy độc lập bằng bộ giả `frappe`: mỗi script mở đầu
+bằng docstring kể **đúng con bug nó canh**, exit 0/1. Sửa vùng xếp chuyến/tách
+đơn thì chạy lại, và khi thêm mục kiểm mới thì **thử phá**: bẻ mã sản xuất cho
+hỏng đúng chốt đó, mục kiểm phải ĐỎ. Mục nào phá mà vẫn xanh là mục canh dối.

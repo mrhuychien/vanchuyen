@@ -98,17 +98,75 @@ def _si_the_tich_lo_cm3(si):
 	return flt(frappe.db.get_value("Sales Invoice", si, "custom_thể_tích_lô"))
 
 
+def la_lo_nguyen(si):
+	"""Đơn KHÔNG ĐỊNH LƯỢNG ĐƯỢC BẰNG KIỆN — xếp nguyên lô, không tách.
+
+	`custom_tổng_kiện` đếm THÙNG ĐẦY; phần dư không đủ một thùng nằm ở
+	`custom_hộp_lẻ`. Đơn nhỏ mà mọi mặt hàng đều đặt ít hơn một quy cách thùng
+	(trạm dừng nghỉ, cửa hàng lẻ) ra tổng kiện = 0 nhưng VẪN CÓ HÀNG THẬT —
+	89 hộp lẻ vẫn chiếm chỗ trên xe và vẫn phải giao.
+
+	Với những đơn đó, "phần còn lại = phép trừ" không dùng được: hộp lẻ là số DƯ
+	cộng dồn của nhiều mặt hàng khác quy cách, không phải một đại lượng chia
+	được. Nên chúng đi NGUYÊN LÔ: một chuyến giữ trọn, không xếp một phần.
+
+	⚠ Khai ở ĐÚNG MỘT CHỖ này. `dieu_phoi.get_pool` và màn Xếp chuyến đều hỏi
+	lại khái niệm này; ba nơi tự định nghĩa lại là ba nơi lệch nhau.
+	"""
+	return _si_tong(si) <= 0
+
+
+def da_giu_nguyen_lo(si, exclude_trip=None):
+	"""Lô nguyên đã nằm trên chuyến nào còn hiệu lực chưa (True/False).
+
+	Với lô nguyên, `da_xep` LUÔN bằng 0 (nó cộng `so_kien`, mà dòng lô nguyên
+	mang 0 kiện), nên bất đẳng thức cross-trip `khac + so_kien > tong + EPS`
+	thành `0 > 0.001` — không bao giờ đúng. Tức là chốt chặn tách-đơn DUY NHẤT
+	của app mất tác dụng đúng ở loại đơn này: cùng một lô gán được cho 3 lái xe
+	trong một ngày, mỗi người tưởng mình chở đủ, không một cảnh báo nào.
+
+	Hàm này là chốt thay thế: đếm CHUYẾN chứ không cộng KIỆN.
+	"""
+	return any(t.name != exclude_trip for t in _trips_holding(si))
+
+
+def da_giao_nguyen_lo(si):
+	"""Lô nguyên đã được giao thật chưa — đếm DÒNG 'Đã giao', không cộng kiện."""
+	val = frappe.db.sql(
+		"""
+		SELECT COUNT(*)
+		FROM `tabChuyen Xe Don Hang` cxd
+		JOIN `tabChuyen Xe` cx ON cx.name = cxd.parent
+		WHERE cxd.sales_invoice = %(si)s
+		  AND cxd.trang_thai_giao = 'Đã giao'
+		  AND cx.docstatus = 1
+		""",
+		{"si": si},
+	)[0][0]
+	return cint(val) > 0
+
+
 def con_lai(si):
 	"""Số kiện của đơn chưa được xếp lên chuyến nào (còn trong pool)."""
 	return _si_tong(si) - da_xep(si)
 
 
 def the_tich_con_lai(si):
-	"""Thể tích (m³) của phần còn lại — pro-rata theo tỉ lệ kiện."""
+	"""Thể tích (m³) của phần còn lại — pro-rata theo tỉ lệ kiện.
+
+	Lô nguyên: trả TRỌN thể tích lô. Bản cũ trả 0.0 cho mọi đơn tổng kiện = 0 —
+	guard chống chia-0 nuốt luôn giá trị thật của `custom_thể_tích_lô`, vốn được
+	tính trên TOÀN BỘ số lượng (kể cả phần hộp lẻ). Vì vậy badge "0 m³" trên màn
+	Xếp chuyến KHÔNG chứng minh lô không chiếm chỗ — chính app tự xoá đi.
+
+	⚠ Công thức này bị CHÉP LẠI inline ở `dieu_phoi.get_pool` (bản đang chạy
+	thật). Sửa ở đây mà quên chỗ kia thì không đổi gì trên màn hình.
+	"""
+	the_tich_lo = _si_the_tich_lo_cm3(si) / 1_000_000.0
 	tong = _si_tong(si)
 	if tong <= 0:
-		return 0.0
-	return _si_the_tich_lo_cm3(si) / 1_000_000.0 * con_lai(si) / tong
+		return the_tich_lo
+	return the_tich_lo * con_lai(si) / tong
 
 
 def _trips_holding(si):
@@ -161,7 +219,15 @@ def _reconcile_one(si):
 		"custom_xe": " / ".join((t.xe or "") for t in trips),
 	}
 
-	if tong > 0 and xep >= tong - EPS:
+	# Lô nguyên đo bằng CÓ CHUYẾN GIỮ hay không, không đo bằng kiện (luôn = 0).
+	# Bản cũ gate cả hai nhánh sau `tong > 0` nên đơn tổng kiện = 0 vĩnh viễn
+	# mang "Chưa xếp" — mà `get_pool` lọc `!= 'Đủ'`, nên nó KHÔNG BAO GIỜ rời
+	# pool kể cả khi đã giao xong ngoài đời. Pool tự bẩn dần, không thao tác nào
+	# gỡ được. (Spec ở docs/build-brief-vanchuyen.md §"Đủ nếu da_xep ≥ tổng −
+	# EPS" không hề có điều kiện `tong > 0` — guard đó là thêm về sau.)
+	if tong <= 0:
+		values["custom_trang_thai_xep"] = "Đủ" if trips else "Chưa xếp"
+	elif xep >= tong - EPS:
 		values["custom_trang_thai_xep"] = "Đủ"
 	elif xep > EPS:
 		values["custom_trang_thai_xep"] = "Một phần"
@@ -173,7 +239,13 @@ def _reconcile_one(si):
 	# VẪN ghi bình thường: đơn phải thấy thông tin chuyến kể cả khi trạng thái đã 'Đã nộp chứng từ'.
 	cur = frappe.db.get_value("Sales Invoice", si, "custom_trạng_thái_vận_chuyển") or ""
 	new_vc = None
-	if tong > 0 and giao >= tong - EPS:
+	# Lô nguyên: "đã giao" là một DÒNG được tick Đã giao trên chuyến đã submit —
+	# `da_giao` cộng kiện nên luôn ra 0 và nhánh này thành code chết. Hệ quả cũ:
+	# lái xe giao xong, chụp chứng từ đủ, mà đơn kẹt "Đang giao hàng" mãi, và
+	# `tong_quan` đếm thiếu tỉ lệ giao của cả hệ thống.
+	if tong <= 0 and da_giao_nguyen_lo(si):
+		new_vc = "Đã giao hàng, chụp chứng từ"
+	elif tong > 0 and giao >= tong - EPS:
 		new_vc = "Đã giao hàng, chụp chứng từ"
 	elif any(t.trang_thai == "Đang giao" for t in trips):
 		new_vc = "Đang giao hàng"
@@ -333,14 +405,35 @@ class ChuyenXe(Document):
 			if not row.hop_le:
 				row.hop_le = flt(si.get("custom_hộp_lẻ"))
 			tong = flt(si.get("custom_tổng_kiện"))
-			if not row.the_tich and row.so_kien and tong > 0:
-				row.the_tich = flt(si.get("custom_thể_tích_lô")) / 1_000_000.0 * flt(row.so_kien) / tong
+			the_tich_lo = flt(si.get("custom_thể_tích_lô")) / 1_000_000.0
+			if not row.the_tich:
+				if tong <= 0:
+					# Lô nguyên đi trọn một chuyến -> mang trọn thể tích, không
+					# pro-rata (không có mẫu số). Thiếu nhánh này thì dòng lô
+					# nguyên luôn 0 m³, `_compute_totals` cộng ra 0, và chốt
+					# chặn quá tải 110% MÙ HOÀN TOÀN với loại hàng này — đổi một
+					# lỗi chặn cứng lấy một lỗi âm thầm nguy hiểm hơn.
+					row.the_tich = the_tich_lo
+				elif row.so_kien:
+					row.the_tich = the_tich_lo * flt(row.so_kien) / tong
 
 	def _validate_structural(self):
 		"""Ràng buộc cấu trúc mỗi dòng — an toàn để chạy mọi lúc (kể cả sau submit)."""
 		seen = set()
 		for row in self.don_hang:
-			if flt(row.so_kien) <= 0:
+			# Âm thì luôn sai, không cần hỏi đơn.
+			if flt(row.so_kien) < 0:
+				frappe.throw(_("Dòng {0}: số kiện không được âm.").format(row.idx))
+			# 0 kiện chỉ hợp lệ với LÔ NGUYÊN (đơn không định lượng được bằng
+			# kiện). Hỏi đơn CHỈ khi gặp dòng 0 kiện -> chuyến bình thường không
+			# tốn thêm truy vấn nào.
+			#
+			# ⚠ Hàm này chạy VÔ ĐIỀU KIỆN, kể cả khi lái xe cập nhật điểm giao
+			# trên chuyến đã submit (lai_xe.update_stop_status -> doc.save()).
+			# Nới bừa cho mọi dòng 0 kiện là để một dòng rác lọt vào rồi nằm im;
+			# giữ nguyên chặn cứng thì lô nguyên không bao giờ xếp được. Phân
+			# biệt bằng chính đơn hàng là đường duy nhất đúng cả hai phía.
+			if flt(row.so_kien) <= 0 and not la_lo_nguyen(row.sales_invoice):
 				frappe.throw(_("Dòng {0}: số kiện phải lớn hơn 0.").format(row.idx))
 			if flt(row.the_tich) < 0:
 				frappe.throw(_("Dòng {0}: thể tích không được âm.").format(row.idx))
@@ -370,8 +463,33 @@ class ChuyenXe(Document):
 			if info.get("custom_hình_thức_vận_chuyển") != "Tự vận chuyển":
 				frappe.throw(_("Đơn {0} không phải hình thức 'Tự vận chuyển'.").format(si))
 
-			# Cross-trip: đã xếp ở chuyến khác + phần lên chuyến này ≤ tổng của đơn.
 			tong = flt(info.get("custom_tổng_kiện"))
+
+			# ── LÔ NGUYÊN: đếm CHUYẾN, không cộng KIỆN ───────────────────
+			#
+			# Bất đẳng thức cross-trip bên dưới là chốt chặn tách-đơn DUY NHẤT
+			# của app, và nó thuần trên SUM(so_kien). Với lô nguyên (tổng = 0,
+			# so_kien = 0) nó thành `0 > 0.001` — luôn False, tức KHÔNG CHẶN GÌ.
+			# Không có nhánh này thì cùng một lô 89 hộp lẻ gán được cho 3 lái xe
+			# cùng ngày mà không một cảnh báo nào: mỗi người tưởng mình chở đủ.
+			#
+			# Nên lô nguyên bị SIẾT CHẶT HƠN lô thường: tối đa MỘT chuyến còn
+			# hiệu lực, không tách.
+			if tong <= 0:
+				if flt(row.so_kien) > EPS:
+					frappe.throw(
+						_("{0}: đơn không có kiện nào (chỉ có hộp lẻ) — xếp nguyên lô, "
+						  "không nhập số kiện.").format(si)
+					)
+				if da_giu_nguyen_lo(si, exclude_trip=self.name):
+					giu = ", ".join(t.name for t in _trips_holding(si) if t.name != self.name)
+					frappe.throw(
+						_("{0}: lô này đi nguyên lô và đã nằm trên chuyến {1} — "
+						  "bỏ khỏi chuyến kia trước, không xếp được hai nơi.").format(si, giu)
+					)
+				continue
+
+			# Cross-trip: đã xếp ở chuyến khác + phần lên chuyến này ≤ tổng của đơn.
 			khac = da_xep(si, exclude_trip=self.name)
 			if khac + flt(row.so_kien) > tong + EPS:
 				frappe.throw(

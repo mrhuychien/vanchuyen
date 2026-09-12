@@ -155,6 +155,44 @@ the_tich_con_lai(si) = (custom_thể_tích_lô/1e6) × con_lai/custom_tổng_ki�
 | `custom_trang_thai_xep` | `Đủ` nếu `da_xep ≥ tổng − EPS`; `Một phần` nếu `0 < da_xep`; `Chưa xếp` nếu về 0 |
 | `custom_trạng_thái_vận_chuyển` | ghi `Đang giao hàng` khi có chuyến trạng thái Đang giao chứa đơn; ghi `Đã giao hàng, chụp chứng từ` khi `da_giao ≥ tổng − EPS`; **skip hoàn toàn nếu giá trị hiện tại là `Đã nộp chứng từ`**; không ghi gì khác |
 
+### 3.3b LÔ NGUYÊN — đơn không định lượng được bằng kiện
+
+`custom_tổng_kiện` đếm **thùng đầy**; phần dư không đủ một thùng nằm ở
+`custom_hộp_lẻ`. Đơn nhỏ mà mọi mặt hàng đều đặt ít hơn một quy cách thùng
+(trạm dừng nghỉ, cửa hàng lẻ) ra **0 kiện + N hộp lẻ** — vẫn là hàng thật, vẫn
+chiếm chỗ trên xe, vẫn phải giao. `custom_thể_tích_lô` **có tính** phần hộp lẻ.
+
+Hộp lẻ **không phải** đại lượng phân bổ: nó là số DƯ cộng dồn của nhiều mặt hàng
+khác quy cách, nên "xếp 40 trong 89 hộp" không có nghĩa. Vì vậy những đơn đó đi
+**NGUYÊN LÔ**:
+
+| | lô thường (`tổng kiện > 0`) | **lô nguyên** (`tổng kiện ≤ 0`) |
+|---|---|---|
+| đại lượng | `so_kien`, tách được nhiều chuyến | không có — đi trọn |
+| dòng chuyến | `so_kien > 0` | `so_kien = 0` (giá trị ĐÚNG) |
+| chốt tách đơn | `khac + so_kien ≤ tổng + EPS` | **tối đa 1 chuyến còn hiệu lực** |
+| thể tích dòng | pro-rata theo kiện | **trọn** `custom_thể_tích_lô` |
+| `custom_trang_thai_xep` | `Đủ` khi `da_xep ≥ tổng − EPS` | `Đủ` khi có chuyến đang giữ |
+| `Đã giao hàng, chụp chứng từ` | khi `da_giao ≥ tổng − EPS` | khi có dòng `Đã giao` trên chuyến đã submit |
+
+Khái niệm khai ở **đúng một chỗ**: `chuyen_xe.la_lo_nguyen`. Ba cạm bẫy bắt buộc
+nhớ khi đụng vào vùng này — mỗi cái có một mục trong `docs/verified/lo_nguyen_check.py`:
+
+1. Bất đẳng thức cross-trip thuần trên `SUM(so_kien)` **mất tác dụng** với lô
+   nguyên (`0 > EPS` luôn False) ⇒ phải có chốt đếm **chuyến** thay thế, nếu
+   không một lô gán được cho N lái xe cùng ngày mà không cảnh báo gì.
+2. Dòng lô nguyên không mang thể tích ⇒ chuyến chở đầy hộp lẻ báo 0 m³ và chốt
+   chặn quá tải 110% **mù hoàn toàn**.
+3. `_validate_structural` chạy **cả khi lái xe cập nhật điểm giao**
+   (`lai_xe.update_stop_status` → `doc.save()`) ⇒ nới `so_kien = 0` cho mọi dòng
+   là để một dòng rác khoá luôn việc cập nhật của **cả chuyến**. Chỉ nới đúng
+   khi đơn thật sự là lô nguyên.
+
+⚠ Đơn **0 kiện + 0 hộp lẻ + 0 m³** là *thiếu dữ liệu*, không phải lô nguyên
+nghiệp vụ. Màn Xếp chuyến vẫn cho xếp (hàng vẫn phải giao) nhưng **nói rõ** là
+nó không tính vào tải xe. Nguồn sinh ra: `api/nhap_don.py` insert Sales Invoice
+server-side nên Client Script (bên app kế toán, nơi tính 3 field này) không chạy.
+
 ### 3.4 Quy ước đặt tên
 
 DocType/fieldname/file **ASCII không dấu** (gotcha diacritics); label tiếng Việt đầy đủ. Mọi thư mục Python có `__init__.py` (kể cả `api/`); `modules.txt` khớp package `van_chuyen`.

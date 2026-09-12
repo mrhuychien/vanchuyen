@@ -151,13 +151,31 @@ function drawPool() {
 	if (moreBtn) moreBtn.addEventListener("click", () => reloadPool(S.poolPage + 1));
 }
 
+// Đơn KHÔNG ĐỊNH LƯỢNG ĐƯỢC BẰNG KIỆN (`custom_tổng_kiện` = 0, hàng nằm hết ở
+// hộp lẻ) đi NGUYÊN LÔ: thêm cả lô, không xếp một phần. Server là nơi khai khái
+// niệm này (`chuyen_xe.la_lo_nguyen`) và gửi xuống cờ `nguyen_lo` — client KHÔNG
+// tự suy lại, để hai bên không bao giờ lệch nhau.
+const nguyenLo = (o) => !!Number(o.nguyen_lo);
+// Không kiện, không hộp lẻ, không thể tích: đây KHÔNG phải lô hộp lẻ mà là đơn
+// chưa ai điền số lượng. Vẫn xếp được (hàng vẫn phải giao), nhưng phải nói ra —
+// nó đóng góp 0 m³ nên thanh tải đang tính thiếu.
+const thieuDuLieu = (o) =>
+	nguyenLo(o) && !(Number(o.hop_le) || 0) && !(Number(o.the_tich_con_lai) || 0);
+
 function poolCard(o) {
 	const picked = poolPicked(o.name);
-	const canAdd = (Number(o.con_lai) || 0) > 0 && !picked;
+	const nl = nguyenLo(o);
+	const giuOKhac = nl && !!Number(o.dang_giu);
+	const canAdd = !picked && !giuOKhac && (nl || (Number(o.con_lai) || 0) > 0);
+	const addLabel = nl
+		? `Thêm cả lô${(Number(o.hop_le) || 0) ? ` (${formatQty(o.hop_le)} hộp lẻ)` : ""}`
+		: `Thêm hết (${formatQty(o.con_lai)} kiện)`;
 	const actions = picked
 		? `<span class="vc-order-added"><i class="fas fa-check"></i> Đã thêm vào chuyến</span>`
-		: `<button type="button" class="vc-order-add-btn" data-add="${escapeHtml(o.name)}" ${canAdd ? "" : "disabled"}><i class="fas fa-plus"></i> Thêm hết (${formatQty(o.con_lai)} kiện)</button>` +
-		  `<button type="button" class="vc-order-partial-btn" data-partial="${escapeHtml(o.name)}">Một phần</button>`;
+		: giuOKhac
+			? `<span class="vc-text-muted vc-text-sm"><i class="fas fa-truck"></i> Lô này đã nằm trên một chuyến khác</span>`
+			: `<button type="button" class="vc-order-add-btn" data-add="${escapeHtml(o.name)}" ${canAdd ? "" : "disabled"}><i class="fas fa-plus"></i> ${addLabel}</button>` +
+			  (nl ? "" : `<button type="button" class="vc-order-partial-btn" data-partial="${escapeHtml(o.name)}">Một phần</button>`);
 	return `
 	<div class="vc-order-card ${picked ? "vc-picked" : ""}">
 		<div class="vc-order-head">
@@ -171,10 +189,16 @@ function poolCard(o) {
 			</div>
 		</div>
 		<div class="vc-order-meta">
-			<span class="vc-chip vc-chip-accent">còn ${formatQty(o.con_lai)}/${formatQty(o.tong_kien)} kiện</span>
+			${nguyenLo(o)
+				? `<span class="vc-chip vc-chip-accent">nguyên lô · không tách</span>`
+				: `<span class="vc-chip vc-chip-accent">còn ${formatQty(o.con_lai)}/${formatQty(o.tong_kien)} kiện</span>`}
 			<span class="vc-chip">${formatM3(o.the_tich_con_lai)} m³</span>
 			${o.hop_le ? `<span class="vc-chip">${formatQty(o.hop_le)} hộp lẻ</span>` : ""}
 		</div>
+		${thieuDuLieu(o)
+			? `<div class="vc-order-note">⚠️ Đơn chưa có số kiện, hộp lẻ lẫn thể tích — xếp được nhưng
+				<b>không tính vào tải xe</b>. Bổ sung số lượng ở đơn hàng để cân tải đúng.</div>`
+			: ""}
 		${o.ghi_chu_npp ? `<div class="vc-order-note">📝 ${escapeHtml(o.ghi_chu_npp)}</div>` : ""}
 		<div class="vc-order-actions">${actions}</div>
 	</div>`;
@@ -191,11 +215,20 @@ function addFull(si) {
 		showToast("Đơn đã có trong chuyến", "warning");
 		return;
 	}
-	if ((Number(o.con_lai) || 0) <= 0) {
-		showToast("Đơn đã xếp đủ", "warning");
-		return;
+	if (nguyenLo(o)) {
+		if (Number(o.dang_giu)) {
+			showToast("Lô này đi nguyên lô và đã nằm trên một chuyến khác", "warning");
+			return;
+		}
+		// Lô nguyên: 0 kiện là GIÁ TRỊ ĐÚNG, và thể tích lấy trọn lô.
+		S.builder.rows.push(mkRow(o, 0, o.the_tich_con_lai));
+	} else {
+		if ((Number(o.con_lai) || 0) <= 0) {
+			showToast("Đơn đã xếp đủ", "warning");
+			return;
+		}
+		S.builder.rows.push(mkRow(o, o.con_lai, o.the_tich_con_lai));
 	}
-	S.builder.rows.push(mkRow(o, o.con_lai, o.the_tich_con_lai));
 	showToast("Đã thêm " + (o.khach_hang || si), "success");
 	drawBuilder();
 	drawPool();
@@ -210,11 +243,15 @@ function mkRow(o, so_kien, the_tich) {
 		con_lai: Number(o.con_lai) || 0,
 		so_kien: Number(so_kien) || 0,
 		the_tich: Number(the_tich) || 0,
+		nguyen_lo: nguyenLo(o) ? 1 : 0,
 		gui_xe: o.gui_xe ? 1 : 0,
 	};
 }
 
 function proRata(row) {
+	// Lô nguyên không có mẫu số để chia — nó đi trọn một chuyến nên mang trọn
+	// thể tích lô. Trả 0 ở đây là để chuyến chở đầy hộp lẻ mà thanh tải báo 0%.
+	if (row.nguyen_lo) return Number(row.the_tich_lo) || 0;
 	// Thể tích pro-rata theo tỉ lệ kiện của cả đơn.
 	if (row.tong_kien > 0) return (row.the_tich_lo * (Number(row.so_kien) || 0)) / row.tong_kien;
 	return 0;
@@ -224,6 +261,13 @@ function openPartialDialog(si) {
 	const o = findPool(si);
 	if (!o || poolPicked(si)) {
 		showToast("Đơn đã có trong chuyến hoặc không hợp lệ", "warning");
+		return;
+	}
+	// Bản cũ vẫn mở dialog cho lô nguyên rồi chặn MỌI giá trị nhập (0 thì "phải
+	// > 0", ≥ 0.01 thì "vượt số kiện còn lại") — ngõ cụt im lặng, người dùng
+	// tưởng mình gõ sai chứ không biết hệ thống không hỗ trợ.
+	if (nguyenLo(o)) {
+		showToast("Đơn này không có kiện nào (hàng nằm ở hộp lẻ) — chỉ xếp được nguyên lô", "warning");
 		return;
 	}
 	const body = `
@@ -399,7 +443,9 @@ function builderRow(r) {
 				<input type="checkbox" data-guixe="${escapeHtml(r.sales_invoice)}" ${r.gui_xe ? "checked" : ""} style="width:16px;height:16px" /> 🚏 Gửi xe
 			</label>
 		</div>
-		<input class="vc-input" style="width:80px" type="number" min="0.01" step="0.01" value="${r.so_kien}" data-kien="${escapeHtml(r.sales_invoice)}" aria-label="Số kiện" />
+		${r.nguyen_lo
+			? `<span class="vc-chip" style="flex-shrink:0" title="Đơn không có kiện — đi nguyên lô, không tách">nguyên lô</span>`
+			: `<input class="vc-input" style="width:80px" type="number" min="0.01" step="0.01" value="${r.so_kien}" data-kien="${escapeHtml(r.sales_invoice)}" aria-label="Số kiện" />`}
 		<button class="vc-icon-btn" data-remove="${escapeHtml(r.sales_invoice)}" aria-label="Bỏ"><i class="fas fa-times"></i></button>
 	</div>`;
 }
@@ -444,7 +490,10 @@ async function saveTrip(thenSubmit) {
 		showToast(errText(e), "error");
 	} finally {
 		S.saving = false;
-		document.querySelectorAll("#vc-b-submit, #vc-b-save, #vc-cta-submit").forEach((el) => (el.disabled = false));
+		// Bật lại ĐỦ BỐN nút đã tắt ở trên. Thiếu "#vc-cta-save" thì sau một lần
+		// lưu lỗi, nút Lưu của thanh CTA mobile chết cứng tới khi tải lại trang —
+		// và lỗi đó lộ ra đúng lúc người dùng vừa ăn một throw.
+		document.querySelectorAll("#vc-b-submit, #vc-b-save, #vc-cta-submit, #vc-cta-save").forEach((el) => (el.disabled = false));
 	}
 }
 
@@ -587,6 +636,10 @@ async function editDraft(name) {
 				con_lai: Number(s.con_lai) || Number(s.so_kien) || 0,
 				so_kien: s.so_kien,
 				the_tich: s.the_tich,
+				// Nạp lại nháp phải giữ ĐÚNG chế độ, nếu không dòng lô nguyên
+				// hiện ô nhập kiện (min=0.01) và `proRata` nhân ra 0 m³ — mở
+				// nháp ra xem rồi lưu lại là mất thể tích của cả dòng.
+				nguyen_lo: Number(s.nguyen_lo) ? 1 : 0,
 				gui_xe: s.gui_xe ? 1 : 0,
 			})),
 		};
@@ -621,8 +674,16 @@ async function openAdjust(name) {
 	const poolOpts = ['<option value="">— chọn đơn từ pool để thêm —</option>']
 		.concat(
 			S.pool
-				.filter((o) => (Number(o.con_lai) || 0) > 0)
-				.map((o) => `<option value="${escapeHtml(o.name)}">${escapeHtml(o.khach_hang || o.name)} · còn ${formatQty(o.con_lai)}</option>`)
+				// Cùng luật với `poolCard`: lô nguyên chưa ai giữ thì vẫn thêm
+				// được. Lọc theo `con_lai > 0` làm lô nguyên biến mất ở màn
+				// Điều chỉnh dù xếp được ở màn dựng nháp — hai đường bất nhất.
+				.filter((o) => (nguyenLo(o) ? !Number(o.dang_giu) : (Number(o.con_lai) || 0) > 0))
+				.map(
+					(o) =>
+						`<option value="${escapeHtml(o.name)}">${escapeHtml(o.khach_hang || o.name)} · ${
+							nguyenLo(o) ? "nguyên lô" : `còn ${formatQty(o.con_lai)}`
+						}</option>`
+				)
 		)
 		.join("");
 	const body = `
