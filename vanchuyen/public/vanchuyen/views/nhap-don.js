@@ -62,6 +62,8 @@ const CSS_TEXT = `
 .nd-st-processing { background:#6366f1; color:#fff; }
 .nd-st-completed { background:#10b981; color:#fff; }
 .nd-st-error { background:#ef4444; color:#fff; }
+.nd-warn { margin:0 0 .7rem; padding:.55rem .7rem; border-radius:10px; font-size:.8rem; font-weight:600;
+  background:rgba(239,68,68,.1); color:#b91c1c; border:1px solid rgba(239,68,68,.3); }
 .nd-list { display:flex; flex-direction:column; gap:.5rem; }
 .nd-items { width:100%; border-collapse:collapse; font-size:.82rem; }
 .nd-items th { text-align:left; font-weight:600; padding:.4rem .5rem; border-bottom:2px solid var(--vc-border,#e5e7eb); color:var(--vc-muted,#6b7280); }
@@ -323,24 +325,76 @@ async function handleFileClick(index) {
 	}
 }
 
+// ── Nhận diện chuỗi: CHUẨN HOÁ, không so chuỗi cứng ──────────────────────────
+//
+// Gemini là mô hình đặt trên dịch vụ ngoài — Google đổi bản thì chữ nó trả về
+// đổi theo, mã app thì đứng im. Trước đây mọi nhánh so `data.customer ===
+// "Coopmart"` nguyên văn; mô hình trả "Co.opMart" (đúng y cách in trên phiếu,
+// và CHÍNH LÀ chuỗi nằm trong prompt nhận diện) là nhánh Coopmart tắt ngóm,
+// app âm thầm rơi về tra theo barcode, mã SKU Coopmart không bao giờ khớp —
+// ra đúng "không tra cứu được mã" dù mã trên phiếu đúng.
+//
+// Giá trị trả về là TÊN CANONICAL, vì nó đi thẳng vào field `customer` của
+// Sales Invoice (Link → Customer) chứ không chỉ để điều hướng.
+const CHUOI_MAP = [
+	["Coopmart", ["coopmart", "coop", "coopmartvn", "saigoncoop", "saigoncoopmart", "coopextra", "coopfood"]],
+	["Mega Market", ["megamarket", "mmmegamarket", "mm", "mmmega"]],
+	["BigC", ["bigc", "bigcvietnam", "bigcvn", "gomarket", "go"]],
+	["Lotte Mart", ["lottemart", "lotte"]],
+	["Winmart", ["winmart", "wincommerce", "winmartplus", "vinmart"]],
+	["EMART", ["emart", "thisoretail", "thiso"]],
+	["BRG Retail", ["brgretail", "brg", "fujimart"]],
+	["AEON", ["aeon", "aeonvietnam", "aeonvn", "aeonhcm"]],
+];
+
+function canonCustomer(raw) {
+	const k = String(raw || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+	if (!k) return "";
+	for (const [ten, keys] of CHUOI_MAP) if (keys.includes(k)) return ten;
+	return String(raw || "").trim(); // không nhận ra → giữ nguyên để người sửa
+}
+
+function lookupTypeFor(customer) {
+	if (customer === "Coopmart") return "coopmart";
+	if (customer === "Mega Market") return "megamarket";
+	return "barcode";
+}
+
+// Tên key trong JSON của Gemini cũng trôi theo bản mô hình. `custom_macop` và
+// `mamm` là key app TỰ ĐẶT trong prompt, không phải từ thông dụng — đúng loại
+// key mô hình dễ đổi cách gọi nhất (sang "sku_number", "sku", "macop"…).
+// Key trôi ⇒ itemId rỗng ⇒ server bỏ qua hết dòng ⇒ cùng một câu lỗi.
+const COOP_KEYS = ["custom_macop", "macop", "ma_coop", "ma_coopmart", "sku_number", "skunumber", "sku"];
+const MM_KEYS = ["mamm", "custom_mamm", "ma_mm", "ma_san_pham_nguoi_mua", "buyer_item_code"];
+const BARCODE_KEYS = ["barcode", "ma_vach", "article", "sale_cd", "unit_barcode"];
+
+function pickKey(item, keys) {
+	for (const k of keys) {
+		const v = item[k];
+		if (v !== undefined && v !== null && String(v).trim() !== "") return String(v).trim();
+	}
+	return "";
+}
+
 // ── Modal kiểm tra ───────────────────────────────────────────────────────────
 function itemIdHeader(customer) {
-	if (customer === "Coopmart") return "Mã Coopmart";
-	if (customer === "Mega Market") return "Mã MM";
+	const lt = lookupTypeFor(canonCustomer(customer));
+	if (lt === "coopmart") return "Mã Coopmart";
+	if (lt === "megamarket") return "Mã MM";
 	return "Barcode";
 }
 
 function normalizeItems(data) {
-	const isCoop = data.customer === "Coopmart";
-	const isMM = data.customer === "Mega Market";
+	const cust = canonCustomer(data.customer);
+	const lookupType = lookupTypeFor(cust);
+	const isCoop = lookupType === "coopmart";
+	const isMM = lookupType === "megamarket";
 	return (data.items || []).map((item) => {
 		let uom = "Thùng";
 		let qty = item.ou_qty || 0;
-		let itemId = item.barcode || item.custom_macop || item.mamm || "";
-		let lookupType = "barcode";
+		let itemId = pickKey(item, BARCODE_KEYS) || pickKey(item, COOP_KEYS) || pickKey(item, MM_KEYS);
 		if (isCoop) {
-			lookupType = "coopmart";
-			itemId = item.custom_macop || itemId;
+			itemId = pickKey(item, COOP_KEYS) || itemId;
 			const q = parseFloat(item.ou_qty || 0);
 			const qp = parseFloat(item.ou_qty_pcs || 0);
 			if (Number.isInteger(q) && q > 0) {
@@ -351,13 +405,12 @@ function normalizeItems(data) {
 				qty = qp;
 			}
 		} else if (isMM) {
-			lookupType = "megamarket";
-			itemId = item.mamm || "";
+			itemId = pickKey(item, MM_KEYS) || itemId;
 			uom = "Hộp";
-		} else if (data.customer === "Winmart") uom = "Hộp";
-		else if (data.customer === "EMART") uom = "Thùng";
-		else if (data.customer === "BRG Retail") uom = "Hộp";
-		else if (data.customer === "AEON") uom = "Thùng";
+		} else if (cust === "Winmart") uom = "Hộp";
+		else if (cust === "EMART") uom = "Thùng";
+		else if (cust === "BRG Retail") uom = "Hộp";
+		else if (cust === "AEON") uom = "Thùng";
 		return { itemId, qty: qty || 1, uom, lookupType };
 	});
 }
@@ -374,9 +427,17 @@ function itemRowHtml(it, ph) {
 function openReviewModal(data) {
 	const ph = itemIdHeader(data.customer);
 	const items = normalizeItems(data);
+	// Ô Khách hàng nhận TÊN CANONICAL, không phải chữ thô Gemini trả về: nó là
+	// Link → Customer của Sales Invoice, và nó cũng quyết định kiểu tra mã.
+	const custCanon = canonCustomer(data.customer);
+	const thieuMa = items.filter((it) => !it.itemId).length;
+	const canhBao = thieuMa
+		? `<div class="nd-warn">⚠ ${thieuMa}/${items.length} dòng KHÔNG đọc được mã từ phiếu — kiểm lại mẫu phiếu hoặc điền tay trước khi tạo đơn.</div>`
+		: "";
 	const body = `
+		${canhBao}
 		<div class="nd-modal-form">
-			<div class="vc-field"><label>Khách hàng *</label><input class="vc-input" id="nd-r-customer" value="${escapeHtml(data.customer || "")}"></div>
+			<div class="vc-field"><label>Khách hàng *</label><input class="vc-input" id="nd-r-customer" value="${escapeHtml(custCanon)}"></div>
 			<div class="vc-field"><label>Số PO *</label><input class="vc-input" id="nd-r-po" value="${escapeHtml(data.so_po || "")}"></div>
 			<div class="vc-field"><label>Ngày PO</label><input class="vc-input" type="date" id="nd-r-podate" value="${escapeHtml(data.po_date || "")}"></div>
 			<div class="vc-field"><label>Địa chỉ giao hàng</label><input class="vc-input" id="nd-r-deliver" value="${escapeHtml(data.delivered_to || "")}"></div>
@@ -421,18 +482,23 @@ function openReviewModal(data) {
 }
 
 function collectModal(content) {
+	const customer = canonCustomer(content.querySelector("#nd-r-customer").value.trim());
 	const header = {
-		customer: content.querySelector("#nd-r-customer").value.trim(),
+		customer,
 		so_po: content.querySelector("#nd-r-po").value.trim(),
 		po_date: content.querySelector("#nd-r-podate").value || null,
 		delivered_to: content.querySelector("#nd-r-deliver").value.trim(),
 	};
+	// Kiểu tra mã suy từ Ô KHÁCH HÀNG lúc bấm Tạo đơn, KHÔNG lấy `dataset.lt`
+	// đóng băng lúc render. Trước đây sửa tay ô Khách hàng thành "Coopmart"
+	// không hề làm các dòng đổi sang tra mã Coopmart — cách chữa hiển nhiên
+	// nhất lại vô tác dụng, nên không ai lần ra được nguyên nhân.
+	const lookupType = lookupTypeFor(customer);
 	const items = [];
 	content.querySelectorAll("#nd-it-body tr").forEach((tr) => {
 		const itemId = tr.querySelector(".nd-it-id").value.trim();
 		const qty = parseFloat(tr.querySelector(".nd-it-qty").value) || 0;
 		const uom = tr.querySelector(".nd-it-uom").value.trim();
-		const lookupType = tr.querySelector(".nd-it-id").dataset.lt || "barcode";
 		if (itemId && qty > 0) items.push({ itemId, qty, uom, lookupType });
 	});
 	return { header, items };
@@ -461,7 +527,12 @@ async function createInvoice(content) {
 			items: JSON.stringify(items),
 		});
 		if (res.missing && res.missing.length) {
-			showToast(`Bỏ qua ${res.missing.length} mã không tìm thấy`, "warning");
+			// In ra ĐÚNG mã bị bỏ — "Bỏ qua N mã" không cho ai lần ra mã nào.
+			showToast(
+				`Bỏ qua ${res.missing.length} mã không tìm thấy: ${res.missing.slice(0, 5).join(", ")}` +
+					(res.missing.length > 5 ? "…" : ""),
+				"warning"
+			);
 		}
 		filesData[currentFileIndex].invoiceName = res.name;
 		filesData[currentFileIndex].status = "completed";

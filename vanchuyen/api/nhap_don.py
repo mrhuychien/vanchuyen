@@ -21,7 +21,7 @@ import time
 
 import frappe
 from frappe import _
-from frappe.utils import flt, nowdate
+from frappe.utils import cstr, flt, nowdate
 
 # Một số barcode in trên phiếu bị lệch — ánh xạ về barcode đúng trong hệ thống.
 BARCODE_MAPPING = {
@@ -140,7 +140,19 @@ LƯU Ý: KHÔNG lấy cột "Uom" làm ou_qty!
 OUTPUT:
 - CHỈ trả về JSON thuần, KHÔNG có markdown, backticks
 - so_po tối đa 50 ký tự
-- Bắt buộc có mảng items với ít nhất 1 sản phẩm"""
+- Bắt buộc có mảng items với ít nhất 1 sản phẩm
+
+RÀNG BUỘC ĐỊNH DẠNG — BẮT BUỘC, KHÔNG ĐƯỢC TỰ ĐỔI:
+- `customer` phải là ĐÚNG MỘT trong các chuỗi sau, không thêm dấu chấm/khoảng
+  trắng, không viết theo cách in trên phiếu:
+  "Coopmart" | "BigC" | "Lotte Mart" | "Winmart" | "EMART" | "BRG Retail" |
+  "Mega Market" | "AEON"
+  (phiếu in "Co.opMart" thì vẫn trả "Coopmart")
+- Tên key trong mỗi phần tử `items` phải ĐÚNG như quy định ở trên:
+  `barcode` / `custom_macop` / `mamm` / `ou_qty` / `ou_qty_pcs`.
+  KHÔNG đổi thành "sku", "sku_number", "ma_vach" hay tên nào khác.
+- Mọi mã sản phẩm (`barcode`, `custom_macop`, `mamm`) phải là CHUỖI trong dấu
+  nháy kép và GIỮ NGUYÊN số 0 ở đầu. Ví dụ: "0123456", KHÔNG phải 123456."""
 
 
 def _require_si_write():
@@ -223,23 +235,77 @@ def _lookup_by_barcode(bc):
 		return None
 
 
+# Field trên Item giữ mã riêng của chuỗi. App NÀY KHÔNG SỞ HỮU các field đó
+# (app khác tạo, xem hooks.py) — nên dò theo danh sách ứng viên thay vì đoán
+# cứng một tên. Tên đầu tiên có cột thật trong bảng sẽ được dùng.
+MA_CHUOI_FIELDS = {
+	"coopmart": ("custom_macop", "custom_ma_coop", "custom_macoop", "macop"),
+	"megamarket": ("mamm", "custom_mamm", "custom_ma_mm"),
+}
+
+
+def _item_field(lookup_type):
+	for f in MA_CHUOI_FIELDS.get(lookup_type, ()):
+		if frappe.db.has_column("Item", f):
+			return f
+	return None
+
+
+def _ma_candidates(value):
+	"""Các biến thể của một mã chuỗi, để so khớp không chết vì số 0 đầu.
+
+	Gemini trả JSON; nếu mã ra dạng SỐ thì "0123456" đã mất số 0 ngay lúc parse
+	— mắt người đọc vẫn thấy "mã đúng". Thử cả hai chiều: bỏ 0 đầu, và đệm 0
+	lại cho tới độ dài thường gặp của mã Coopmart/MM.
+	"""
+	v = cstr(value).strip()
+	out = [v]
+	bare = v.lstrip("0")
+	if bare and bare != v:
+		out.append(bare)
+	if v.isdigit():
+		for width in (6, 7, 8, 9, 10, 13):
+			if len(bare or v) < width:
+				out.append((bare or v).zfill(width))
+	seen, uniq = set(), []
+	for x in out:
+		if x and x not in seen:
+			seen.add(x)
+			uniq.append(x)
+	return uniq
+
+
 def _lookup_by_field(fieldname, value):
-	if not frappe.db.has_column("Item", fieldname):
-		return None
+	cands = _ma_candidates(value)
 	rows = frappe.get_all(
-		"Item", filters={fieldname: value}, fields=["name"],
-		order_by="creation desc", limit_page_length=1,
+		"Item", filters={fieldname: ["in", cands]}, fields=["name", fieldname],
+		order_by="creation desc", limit_page_length=len(cands) + 5,
 	)
-	return rows[0].name if rows else None
+	if not rows:
+		return None
+	# Ưu tiên bản khớp ĐÚNG Y mã trên phiếu; chỉ dùng biến thể khi không có.
+	exact = cstr(value).strip()
+	for r in rows:
+		if cstr(r.get(fieldname)).strip() == exact:
+			return r.name
+	return rows[0].name
 
 
 def _resolve_item_code(item_id, lookup_type):
 	if not item_id:
 		return None
-	if lookup_type == "coopmart":
-		return _lookup_by_field("custom_macop", item_id)
-	if lookup_type == "megamarket":
-		return _lookup_by_field("mamm", item_id)
+	if lookup_type in MA_CHUOI_FIELDS:
+		f = _item_field(lookup_type)
+		if not f:
+			# Cấu hình sai, KHÔNG phải mã sai. Phải kêu to: trước đây hàm này
+			# trả None im lặng nên mọi đơn của chuỗi đó báo "không tra được mã"
+			# và không ai lần ra được là do thiếu field.
+			frappe.throw(
+				_("Item chưa có field giữ mã {0} (đã thử: {1}). Đây là lỗi cấu hình, không phải mã sai.").format(
+					lookup_type, ", ".join(MA_CHUOI_FIELDS[lookup_type])
+				)
+			)
+		return _lookup_by_field(f, item_id)
 	return _lookup_by_barcode(item_id)
 
 
@@ -270,6 +336,8 @@ def create_sales_invoice(header, items):
 		frappe.throw(_("Thiếu Khách hàng hoặc Số PO."))
 
 	missing = []
+	khong_co_ma = 0     # dòng Gemini KHÔNG đọc được mã (itemId rỗng)
+	kieu_tra = set()    # các kiểu tra đã dùng — in ra khi thất bại
 	si_items = []
 	income_account = _cfg("nhap_don_income_account", "511 - Doanh thu bán hàng - HGC")
 	cost_center = _cfg("nhap_don_cost_center", "Main - HGC")
@@ -278,7 +346,11 @@ def create_sales_invoice(header, items):
 		qty = flt(it.get("qty"))
 		uom = (it.get("uom") or "").strip() or "Thùng"
 		lookup_type = it.get("lookupType") or "barcode"
-		if not item_id or qty <= 0:
+		kieu_tra.add(lookup_type)
+		if not item_id:
+			khong_co_ma += 1
+			continue
+		if qty <= 0:
 			continue
 		item_code = _resolve_item_code(item_id, lookup_type)
 		if not item_code:
@@ -296,7 +368,23 @@ def create_sales_invoice(header, items):
 		)
 
 	if not si_items:
-		frappe.throw(_("Không có sản phẩm hợp lệ nào (không tra cứu được mã)."))
+		# TRƯỚC ĐÂY câu này không nói gì cả: field thiếu, mã không khớp, và
+		# Gemini đọc trượt mã đều ra cùng một dòng chữ. Nói thẳng ra từng thứ,
+		# kèm ĐÚNG các mã bị trượt và KIỂU TRA đã dùng — kiểu tra là chỗ lộ ra
+		# khi tên khách hàng Gemini trả về lệch khỏi "Coopmart" và app âm thầm
+		# rơi về tra theo barcode.
+		ct = []
+		if missing:
+			ct.append(_("{0} mã không tìm thấy trong Item: {1}").format(
+				len(missing), ", ".join(missing[:15]) + ("…" if len(missing) > 15 else "")))
+		if khong_co_ma:
+			ct.append(_("{0} dòng không đọc được mã từ phiếu").format(khong_co_ma))
+		ct.append(_("kiểu tra: {0}").format(", ".join(sorted(kieu_tra)) or "—"))
+		ct.append(_("khách hàng: {0}").format(customer))
+		msg = _("Không tạo được đơn — không có sản phẩm hợp lệ.") + "\n• " + "\n• ".join(ct)
+		# Ghi Error Log để còn dấu vết sau khi người dùng tắt thông báo.
+		frappe.log_error(msg, "nhap_don: khong tra duoc ma")
+		frappe.throw(msg)
 
 	doc = frappe.get_doc(
 		{
@@ -314,4 +402,7 @@ def create_sales_invoice(header, items):
 		doc.shipping_address_name = delivered_to
 	doc.insert()
 	frappe.db.commit()
-	return {"name": doc.name, "missing": missing, "created": len(si_items)}
+	return {
+		"name": doc.name, "missing": missing, "created": len(si_items),
+		"khong_co_ma": khong_co_ma, "kieu_tra": sorted(kieu_tra),
+	}
