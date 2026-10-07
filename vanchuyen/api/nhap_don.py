@@ -244,7 +244,18 @@ def _lookup_by_barcode(bc):
 # key app yêu cầu Gemini trả về; còn dưới đây là TÊN CỘT trên bảng Item. Hai
 # thứ khác nhau, trùng tên là trùng ngẫu nhiên.
 #
-# Tên thật trên site là `custom_mã_coopmart` — FIELDNAME CÓ DẤU TIẾNG VIỆT.
+# TÊN ĐÃ XÁC NHẬN TỪ SITE (không còn là phỏng đoán — đừng "dọn" đi):
+#   Coopmart     -> `custom_mã_coopmart`
+#   Mega Market  -> `custom_mã_mm`
+# Các ứng viên còn lại giữ làm đường lùi cho site khác, xem _item_field.
+#
+# ⚠ CỐ Ý KHÔNG CÓ Winmart (và BigC / Lotte Mart / EMART / BRG Retail / AEON):
+# những chuỗi đó tra bằng BARCODE và đang chạy được. Site có cột
+# `custom_mã_win`, nhưng thêm nó vào đây là đổi một đường đang chạy sang
+# đường chưa ai kiểm — quyết định của chủ hệ thống là KHÔNG đụng. Thiếu ở đây
+# không phải bỏ sót.
+#
+# FIELDNAME CÓ DẤU TIẾNG VIỆT.
 # Ba hệ quả, mỗi cái đã làm chết luồng này một lần:
 #   1. Không được so tên bằng `==` với chuỗi gõ trong mã: cùng chữ "ã" có hai
 #      cách mã hoá Unicode (NFC U+00E3, hoặc "a" + U+0303 NFD). Field tạo từ

@@ -141,6 +141,7 @@ COLS = set()        # cột có thật trên Item
 ITEMS = []          # [{"name":..., "<field>":...}]
 LOGGED = []
 SQL_COLS_USED = []  # tên cột thực sự đi vào câu SQL
+BARCODES = {}       # barcode -> tên Item (bảng `Item Barcode` giả)
 
 
 def _stub_frappe():
@@ -161,7 +162,17 @@ def _stub_frappe():
     fr.conf = {}
     fr.has_permission = lambda *a, **k: True
 
-    fr.get_all = lambda *a, **k: []
+    def get_all(dt, filters=None, fields=None, **k):
+        # `_lookup_by_barcode` lọc dạng [["Item Barcode", "barcode", "=", bc]].
+        if dt != "Item" or not isinstance(filters, (list, tuple)):
+            return []
+        for f in filters:
+            if len(f) == 4 and f[0] == "Item Barcode" and f[1] == "barcode":
+                hit = BARCODES.get(str(f[3]))
+                return [_D(name=hit)] if hit else []
+        return []
+
+    fr.get_all = get_all
 
     class _DB:
         def get_table_columns(self, dt):
@@ -372,6 +383,45 @@ def main():
           SQL_COLS_USED and SQL_COLS_USED[0] == NFD,
           repr(SQL_COLS_USED[:1]))
 
+    # ── 5c. Tên field ĐÃ XÁC NHẬN, và chuỗi nào CỐ Ý vẫn dùng barcode ──
+    #
+    # Hai tên dưới đây là tên thật trên site, không phải phỏng đoán. Ghim lại
+    # để ai dọn danh sách ứng viên cũng không gỡ mất chúng.
+    print("-" * 78)
+    print("── 5c. Tên field đã xác nhận · chuỗi dùng barcode thì để yên ───────")
+    COLS.clear()
+    COLS.update({"custom_mã_coopmart", "custom_mã_mm"})
+    for lt, ten in [("coopmart", "custom_mã_coopmart"), ("megamarket", "custom_mã_mm")]:
+        check(f"dò ra tên thật của {lt}: `{ten}`",
+              nd._item_field(lt) == ten, str(nd._item_field(lt)))
+
+    # Quyết định của chủ hệ thống: chuỗi nào đang tra bằng BARCODE thì không
+    # đổi sang cột mã riêng, dù site có cột đó (`custom_mã_win` là một ví dụ).
+    # Chốt ở CẢ HAI tầng, vì chỉ chốt một tầng thì tầng kia lệch vẫn lọt.
+    check("server KHÔNG có cấu hình cột mã cho winmart",
+          "winmart" not in nd.MA_CHUOI_FIELDS, str(sorted(nd.MA_CHUOI_FIELDS)))
+    # Đơn winmart phải đi đường barcode: ra Item nếu barcode khớp, và KHÔNG
+    # throw "thiếu cột" (cột mã Win không nằm trong cấu hình nên không ai đòi).
+    del ITEMS[:]
+    BARCODES.clear()
+    BARCODES["8936110891189"] = "SP-WIN-BC"
+    try:
+        got = nd._resolve_item_code("8936110891189", "winmart")
+        check("đơn winmart tra ĐƯỢC bằng barcode", got == "SP-WIN-BC", str(got))
+        check("và mã lạ thì trả None, không throw thiếu cột",
+              nd._resolve_item_code("W12345", "winmart") is None,
+              str(nd._resolve_item_code("W12345", "winmart")))
+    except Throw as e:
+        check("đơn winmart đi đường barcode, không throw", False, str(e)[:70])
+
+    try:
+        d = run_js("""() => ['Winmart', 'WINMART', 'WinCommerce', 'BigC', 'Lotte Mart',
+          'EMART', 'BRG Retail', 'AEON'].map((c) => lookupTypeFor(canonCustomer(c)))""")
+        check("frontend: các chuỗi còn lại đều giữ kiểu tra “barcode”",
+              d == ["barcode"] * 8, str(d))
+    except Exception as e:  # noqa: BLE001
+        check("chạy được lookupTypeFor cho các chuỗi barcode", False, str(e)[:90])
+
     # Không đọc được danh sách cột -> phải lùi về has_column, đừng mù luôn.
     # Đường lùi so tên ĐÚNG Y (không có `_ascii_key` đỡ), nên TÊN THẬT CÓ DẤU
     # phải nằm trong danh sách ứng viên. Trên đường chính nó là dư thừa —
@@ -392,8 +442,16 @@ def main():
 
     nd.frappe.db = _NoCols()
     try:
-        check("không đọc được danh sách cột -> lùi về has_column với TÊN THẬT CÓ DẤU",
-              nd._item_field("coopmart") == THAT, str(nd._item_field("coopmart")))
+        # Đường lùi so tên ĐÚNG Y nên CẢ HAI tên thật có dấu phải nằm trong
+        # danh sách ứng viên. Trên đường chính chúng dư thừa — `_ascii_key` bỏ
+        # cả dấu lẫn gạch dưới, nên `custom_ma_coopmart`/`custom_mamm` cho
+        # cùng khoá — nên chỉ mục này gánh được việc chốt rằng không ai gỡ
+        # mất chúng khi "dọn" danh sách.
+        for lt, ten in [("coopmart", THAT), ("megamarket", "custom_mã_mm")]:
+            COLS.clear()
+            COLS.add(ten)
+            check(f"không đọc được danh sách cột -> lùi về has_column với `{ten}`",
+                  nd._item_field(lt) == ten, str(nd._item_field(lt)))
     finally:
         nd.frappe.db = _real_db
 
