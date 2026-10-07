@@ -47,6 +47,7 @@ import subprocess
 import sys
 import tempfile
 import types
+import unicodedata
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
@@ -139,6 +140,7 @@ class Throw(Exception):
 COLS = set()        # cột có thật trên Item
 ITEMS = []          # [{"name":..., "<field>":...}]
 LOGGED = []
+SQL_COLS_USED = []  # tên cột thực sự đi vào câu SQL
 
 
 def _stub_frappe():
@@ -159,31 +161,34 @@ def _stub_frappe():
     fr.conf = {}
     fr.has_permission = lambda *a, **k: True
 
-    def get_all(dt, filters=None, fields=None, **k):
-        if dt != "Item":
-            return []
-        f = dict(filters or {})
-        for fieldname, cond in f.items():
-            want = cond[1] if isinstance(cond, (list, tuple)) else [cond]
-            want = [str(x) for x in want]
-            out = []
-            for it in ITEMS:
-                if str(it.get(fieldname, "")) in want:
-                    out.append(_D({c: it.get(c) for c in (fields or ["name"])}))
-            return out
-        return []
-
-    fr.get_all = get_all
+    fr.get_all = lambda *a, **k: []
 
     class _DB:
+        def get_table_columns(self, dt):
+            return sorted(COLS) if dt == "Item" else []
+
         def has_column(self, dt, col):
             return dt == "Item" and col in COLS
 
         def get_value(self, *a, **k):
             return None
 
-        def sql(self, *a, **k):
-            return []
+        def sql(self, query, values=None, **k):
+            # Bắt đúng câu tra Item theo cột mã, và LẤY TÊN CỘT TỪ CHÍNH CÂU
+            # SQL — nhờ vậy phép kiểm chốt được rằng tên cột đi vào SQL là tên
+            # thật trên DB, không phải chuỗi gõ trong mã (bẫy NFC/NFD).
+            q = " ".join(str(query).split())
+            m = re.search(r"SELECT name, `(.+?)` AS ma FROM `tabItem`", q)
+            if not m:
+                return []
+            col = m.group(1)
+            SQL_COLS_USED.append(col)
+            want = [str(x) for x in (values or {}).get("v", ())]
+            return [
+                _D(name=it["name"], ma=it.get(col))
+                for it in ITEMS
+                if str(it.get(col, "\0")) in want
+            ]
 
         def commit(self):
             pass
@@ -335,13 +340,70 @@ def main():
     check("dò được field thay thế khi tên chính không tồn tại",
           nd._item_field("coopmart") == "custom_ma_coop", str(nd._item_field("coopmart")))
 
+    # ── 5b. FIELDNAME CÓ DẤU TIẾNG VIỆT ───────────────────────────────
+    #
+    # Tên thật trên site là `custom_mã_coopmart`. Chữ "ã" có HAI cách mã hoá
+    # Unicode; field tạo từ máy Mac ra NFD còn mã nguồn này NFC, nên so tên
+    # bằng `==` là trả False dù cột có thật — đúng kiểu hỏng không ai nghĩ ra.
+    print("-" * 78)
+    print("── 5b. Fieldname tiếng Việt có dấu — NFC/NFD và tên không dấu ──────")
+    THAT = "custom_mã_coopmart"
+    NFD = unicodedata.normalize("NFD", THAT)
+    check("hai dạng Unicode của cùng tên KHÔNG bằng nhau theo `==` (bẫy có thật)",
+          THAT != NFD and len(THAT) != len(NFD), f"NFC {len(THAT)} ký tự vs NFD {len(NFD)}")
+    for nhan, col in [("NFC (đúng như gõ trong mã)", THAT),
+                      ("NFD (field tạo từ máy Mac)", NFD),
+                      ("không dấu `custom_ma_coopmart`", "custom_ma_coopmart")]:
+        COLS.clear()
+        COLS.add(col)
+        got = nd._item_field("coopmart")
+        check(f"cột {nhan} -> dò ra", got == col, repr(got))
+
+    # Và tên đi vào SQL phải là TÊN LẤY TỪ DB, không phải chuỗi gõ trong mã.
+    COLS.clear()
+    COLS.add(NFD)
+    del ITEMS[:]
+    del SQL_COLS_USED[:]
+    ITEMS.append({"name": "SP-NFD", NFD: "123456"})
+    check("cột dạng NFD -> vẫn tra ra Item",
+          nd._resolve_item_code("123456", "coopmart") == "SP-NFD",
+          str(nd._resolve_item_code("123456", "coopmart")))
+    check("và tên cột đi vào SQL là tên LẤY TỪ DB (dạng NFD), không phải NFC",
+          SQL_COLS_USED and SQL_COLS_USED[0] == NFD,
+          repr(SQL_COLS_USED[:1]))
+
+    # Không đọc được danh sách cột -> phải lùi về has_column, đừng mù luôn.
+    # Đường lùi so tên ĐÚNG Y (không có `_ascii_key` đỡ), nên TÊN THẬT CÓ DẤU
+    # phải nằm trong danh sách ứng viên. Trên đường chính nó là dư thừa —
+    # `custom_ma_coopmart` cho cùng một khoá — nên chỉ mục này gánh được việc
+    # chốt rằng tên thật không bị gỡ khỏi danh sách.
+    COLS.clear()
+    COLS.add(THAT)
+    _real_db = nd.frappe.db
+
+    class _NoCols:
+        # Giữ tham chiếu tới db THẬT trong biến đóng — `nd.frappe.db` lúc này
+        # đã trỏ vào chính instance này, lấy qua đó là đệ quy vô tận.
+        def __getattr__(self, k):
+            return getattr(_real_db, k)
+
+        def get_table_columns(self, dt):
+            raise RuntimeError("không đọc được")
+
+    nd.frappe.db = _NoCols()
+    try:
+        check("không đọc được danh sách cột -> lùi về has_column với TÊN THẬT CÓ DẤU",
+              nd._item_field("coopmart") == THAT, str(nd._item_field("coopmart")))
+    finally:
+        nd.frappe.db = _real_db
+
     # ── 6. Mã mất số 0 đầu (Gemini trả JSON số) vẫn tra ra ─────────────
     print("-" * 78)
     print("── 6. Mã mất số 0 đầu lúc parse JSON -> vẫn tra ra đúng Item ───────")
     COLS.clear()
-    COLS.add("custom_macop")
+    COLS.add("custom_mã_coopmart")
     del ITEMS[:]
-    ITEMS.append({"name": "SP-COOP-A", "custom_macop": "0123456"})
+    ITEMS.append({"name": "SP-COOP-A", "custom_mã_coopmart": "0123456"})
     check("mã trên phiếu 123456, Item lưu 0123456 -> vẫn ra Item",
           nd._resolve_item_code("123456", "coopmart") == "SP-COOP-A",
           str(nd._resolve_item_code("123456", "coopmart")))
@@ -353,8 +415,8 @@ def main():
 
     # Có cả hai bản -> phải ưu tiên bản khớp ĐÚNG Y mã trên phiếu.
     del ITEMS[:]
-    ITEMS.append({"name": "SP-DEM-0", "custom_macop": "0123456"})
-    ITEMS.append({"name": "SP-DUNG-Y", "custom_macop": "123456"})
+    ITEMS.append({"name": "SP-DEM-0", "custom_mã_coopmart": "0123456"})
+    ITEMS.append({"name": "SP-DUNG-Y", "custom_mã_coopmart": "123456"})
     check("có cả 2 bản -> lấy bản khớp ĐÚNG Y mã trên phiếu",
           nd._resolve_item_code("123456", "coopmart") == "SP-DUNG-Y",
           str(nd._resolve_item_code("123456", "coopmart")))

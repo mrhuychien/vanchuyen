@@ -18,6 +18,7 @@ Cấu hình site_config (bench set-config ...):
 
 import json
 import time
+import unicodedata
 
 import frappe
 from frappe import _
@@ -236,16 +237,68 @@ def _lookup_by_barcode(bc):
 
 
 # Field trên Item giữ mã riêng của chuỗi. App NÀY KHÔNG SỞ HỮU các field đó
-# (app khác tạo, xem hooks.py) — nên dò theo danh sách ứng viên thay vì đoán
-# cứng một tên. Tên đầu tiên có cột thật trong bảng sẽ được dùng.
+# (app khác tạo — KHÔNG ship qua fixtures, xem hooks.py), nên dò theo danh
+# sách ứng viên thay vì đoán cứng một tên.
+#
+# ⚠ ĐỪNG LẪN với key JSON trong SYSTEM_PROMPT: `custom_macop` ở trên là tên
+# key app yêu cầu Gemini trả về; còn dưới đây là TÊN CỘT trên bảng Item. Hai
+# thứ khác nhau, trùng tên là trùng ngẫu nhiên.
+#
+# Tên thật trên site là `custom_mã_coopmart` — FIELDNAME CÓ DẤU TIẾNG VIỆT.
+# Ba hệ quả, mỗi cái đã làm chết luồng này một lần:
+#   1. Không được so tên bằng `==` với chuỗi gõ trong mã: cùng chữ "ã" có hai
+#      cách mã hoá Unicode (NFC U+00E3, hoặc "a" + U+0303 NFD). Field tạo từ
+#      máy Mac ra NFD, mã nguồn này NFC — `has_column` trả False dù cột có
+#      thật. Vì vậy so theo KHOÁ BỎ DẤU và dùng TÊN CỘT LẤY TỪ DB.
+#   2. Không dùng `frappe.get_all` với fieldname phi-ASCII — tầng query
+#      builder không đáng tin với tên có dấu. Cả app này đã dùng SQL thô +
+#      backtick cho field có dấu (chuyen_xe.py, dieu_phoi.py, chi_cuoc.py).
+#   3. Chữ "đ" KHÔNG tự rã dấu khi normalize NFD, phải đổi tay sang "d".
 MA_CHUOI_FIELDS = {
-	"coopmart": ("custom_macop", "custom_ma_coop", "custom_macoop", "macop"),
-	"megamarket": ("mamm", "custom_mamm", "custom_ma_mm"),
+	"coopmart": (
+		"custom_mã_coopmart", "custom_ma_coopmart", "custom_mã_coop",
+		"custom_macop", "custom_ma_coop", "macop",
+	),
+	"megamarket": ("custom_mã_mm", "custom_ma_mm", "mamm", "custom_mamm"),
 }
 
 
+def _ascii_key(s):
+	"""Khoá so tên cột: bỏ dấu, hạ chữ, bỏ gạch dưới.
+
+	Nhờ vậy `custom_mã_coopmart` (NFC), cùng chuỗi đó ở dạng NFD, và
+	`custom_ma_coopmart` đều cho một khoá.
+	"""
+	t = unicodedata.normalize("NFD", cstr(s))
+	t = "".join(c for c in t if not unicodedata.combining(c))
+	return t.replace("đ", "d").replace("Đ", "d").lower().replace("_", "")
+
+
+def _item_columns():
+	try:
+		return list(frappe.db.get_table_columns("Item") or [])
+	except Exception:  # noqa: BLE001
+		return []
+
+
 def _item_field(lookup_type):
-	for f in MA_CHUOI_FIELDS.get(lookup_type, ()):
+	"""Tên cột THẬT trên bảng Item giữ mã của chuỗi này, hoặc None.
+
+	Trả về tên lấy từ chính DB (không phải chuỗi gõ trong mã) để mọi khác biệt
+	NFC/NFD biến mất trước khi tên đó đi vào câu SQL.
+	"""
+	cands = MA_CHUOI_FIELDS.get(lookup_type, ())
+	by_key = {}
+	for c in _item_columns():
+		by_key.setdefault(_ascii_key(c), c)
+	if by_key:
+		for f in cands:
+			hit = by_key.get(_ascii_key(f))
+			if hit:
+				return hit
+		return None
+	# Không đọc được danh sách cột -> lùi về has_column, so tên đúng y.
+	for f in cands:
 		if frappe.db.has_column("Item", f):
 			return f
 	return None
@@ -276,17 +329,27 @@ def _ma_candidates(value):
 
 
 def _lookup_by_field(fieldname, value):
+	"""Tra Item theo cột mã của chuỗi. `fieldname` LUÔN đến từ `_item_field`,
+	tức là tên cột thật đọc từ DB — không phải dữ liệu người dùng gửi lên.
+
+	SQL thô + backtick vì fieldname có dấu tiếng Việt (xem ghi chú ở
+	MA_CHUOI_FIELDS). Việc này cũng bỏ luôn tầng lọc quyền của `get_all`: nếu
+	role gọi API không có quyền read Item thì `get_all` trả [] IM LẶNG và lại
+	ra "không tra được mã". Người gọi đã bị chặn bằng `_require_si_write()` —
+	ai tạo được hoá đơn thì đọc được Item.
+	"""
 	cands = _ma_candidates(value)
-	rows = frappe.get_all(
-		"Item", filters={fieldname: ["in", cands]}, fields=["name", fieldname],
-		order_by="creation desc", limit_page_length=len(cands) + 5,
+	col = cstr(fieldname).replace("`", "")
+	rows = frappe.db.sql(
+		f"SELECT name, `{col}` AS ma FROM `tabItem` WHERE `{col}` IN %(v)s ORDER BY creation DESC",
+		{"v": tuple(cands)}, as_dict=True,
 	)
 	if not rows:
 		return None
 	# Ưu tiên bản khớp ĐÚNG Y mã trên phiếu; chỉ dùng biến thể khi không có.
 	exact = cstr(value).strip()
 	for r in rows:
-		if cstr(r.get(fieldname)).strip() == exact:
+		if cstr(r.ma).strip() == exact:
 			return r.name
 	return rows[0].name
 
