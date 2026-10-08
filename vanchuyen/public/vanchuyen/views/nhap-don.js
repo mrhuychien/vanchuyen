@@ -336,8 +336,21 @@ async function handleFileClick(index) {
 //
 // Giá trị trả về là TÊN CANONICAL, vì nó đi thẳng vào field `customer` của
 // Sales Invoice (Link → Customer) chứ không chỉ để điều hướng.
+// ⚠ CHỈ gộp các cách viết của CÙNG MỘT pháp nhân. Giá trị trả về đi thẳng vào
+// field `customer` (Link → Customer), tức quyết định sổ công nợ và hạn thanh
+// toán — `docs/mt/SOP_ke_toan_MT_RVHG.md:116` ghi "Hạn: theo pháp nhân — cấu
+// hình đúng trên Customer".
+//
+// Co.opXtra / Co.op Food CỐ Ý KHÔNG nằm trong rổ "Coopmart": SOP mục 2.4 ghi
+// Saigon Co.op có ~8 PHÁP NHÂN riêng (chi nhánh Liên hiệp + các công ty TNHH
+// thành viên), mỗi pháp nhân một bảng kê. Gộp chúng lại là dồn công nợ của
+// nhiều pháp nhân vào một sổ con. Tên lạ thì cứ để `canonCustomer` trả nguyên
+// văn và Frappe báo không tìm thấy Customer — ỒN ÀO còn hơn SAI ÂM THẦM.
+//
+// BigC/GO! thì NGƯỢC LẠI, gộp được: SOP mục 2.1 ghi rõ cùng pháp nhân EB
+// (tối thiểu 2 mã NCC 3003172 / 3006634).
 const CHUOI_MAP = [
-	["Coopmart", ["coopmart", "coop", "coopmartvn", "saigoncoop", "saigoncoopmart", "coopextra", "coopfood"]],
+	["Coopmart", ["coopmart", "coop", "coopmartvn", "saigoncoop", "saigoncoopmart"]],
 	["Mega Market", ["megamarket", "mmmegamarket", "mm", "mmmega"]],
 	["BigC", ["bigc", "bigcvietnam", "bigcvn", "gomarket", "go"]],
 	["Lotte Mart", ["lottemart", "lotte"]],
@@ -534,11 +547,20 @@ async function createInvoice(content) {
 				"warning"
 			);
 		}
+		// Thiếu khối người mua là việc PHẢI làm trước khi ghi sổ, không phải
+		// thông báo cho vui: ghi sổ rồi thì Frappe không fetch lại 6 ô đó nữa
+		// (đều không có allow_on_submit) nên cách duy nhất là HỦY hóa đơn — mà
+		// hủy một hóa đơn đã đẩy MISA có thể sinh hóa đơn thứ hai cho một lần
+		// bán. Vì vậy nó đi vào THẺ KẾT QUẢ (ở lại trên màn hình) chứ không chỉ
+		// là một toast trôi qua sau 3 giây.
+		if ((res.thieu_nguoi_mua && res.thieu_nguoi_mua.length) || res.canh_bao_dia_chi) {
+			showToast("⚠ Thiếu thông tin người mua — mở hóa đơn chọn Địa chỉ giao hàng trước khi ghi sổ", "error");
+		}
 		filesData[currentFileIndex].invoiceName = res.name;
 		filesData[currentFileIndex].status = "completed";
 		updateFileStatus(currentFileIndex, "completed");
 		updateProcessAllBtn();
-		addResult(currentReviewFile.displayName, res.name, res.created, true);
+		addResult(currentReviewFile.displayName, res.name, res.created, true, res);
 		showToast(`Đã tạo ${res.name}`, "success");
 		if (isAutoCreating) {
 			await continueAutoCreate();
@@ -609,16 +631,30 @@ async function processAll() {
 }
 
 // ── Kết quả ──────────────────────────────────────────────────────────────────
-function addResult(fileName, invoiceName, itemsCount, ok) {
+function addResult(fileName, invoiceName, itemsCount, ok, res) {
 	const card = document.getElementById("nd-results-card");
 	const grid = document.getElementById("nd-results");
 	card.style.display = "";
 	const div = document.createElement("div");
 	div.className = `nd-result ${ok ? "ok" : "err"}`;
+	// Việc còn phải làm trên hóa đơn nháp — Ở LẠI trên màn hình, không trôi như
+	// toast. Phải làm TRƯỚC khi ghi sổ: sau submit, sáu ô người mua không được
+	// fetch lại nữa nên chỉ còn đường hủy hóa đơn.
+	let viec = "";
+	if (ok && res) {
+		const d = [];
+		if (res.canh_bao_dia_chi) d.push(escapeHtml(res.canh_bao_dia_chi));
+		if (res.thieu_nguoi_mua && res.thieu_nguoi_mua.length) {
+			d.push(`Hóa đơn chưa có: <b>${escapeHtml(res.thieu_nguoi_mua.join(", "))}</b>. ` +
+				"Mở hóa đơn, chọn <b>Địa chỉ giao hàng</b> rồi mới ghi sổ — " +
+				"ghi sổ xong thì phải hủy hóa đơn mới sửa được ô này.");
+		}
+		if (d.length) viec = `<div class="nd-warn vc-mt-1">⚠ ${d.join("<br>")}</div>`;
+	}
 	div.innerHTML = ok
 		? `<div style="font-weight:600">📄 ${escapeHtml(fileName)}</div>
 			<div class="vc-mt-1" style="font-size:.85rem">✅ ${itemsCount} sản phẩm ·
-			<a href="/app/sales-invoice/${encodeURIComponent(invoiceName)}" target="_blank">Xem ${escapeHtml(invoiceName)} →</a></div>`
+			<a href="/app/sales-invoice/${encodeURIComponent(invoiceName)}" target="_blank">Xem ${escapeHtml(invoiceName)} →</a></div>${viec}`
 		: `<div style="font-weight:600">📄 ${escapeHtml(fileName)}</div>
 			<div class="vc-mt-1" style="font-size:.85rem;color:#ef4444">❌ Tạo đơn thất bại</div>`;
 	grid.appendChild(div);

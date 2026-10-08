@@ -17,6 +17,7 @@ Cấu hình site_config (bench set-config ...):
 """
 
 import json
+import re
 import time
 import unicodedata
 
@@ -392,6 +393,141 @@ def _item_price(item_code, uom):
 	return flt(rows[0].price_list_rate) if rows else 0.0
 
 
+# ── Địa chỉ giao hàng ────────────────────────────────────────────────────────
+#
+# `shipping_address_name` là Link → Address, và nó là CÁI NEO của toàn bộ khối
+# thông tin người mua trên hóa đơn: sáu ô MST / tên đơn vị / địa chỉ / tên
+# người mua / hình thức thanh toán / email đều `fetch_from` ô này
+# (docs/legacy/Fields.csv — cột Fetch From, cả sáu đều `shipping_address_name.*`).
+#
+# Nhồi chuỗi thô Gemini đọc từ phiếu ("EMART PHI", "FujiMart Lê Duẩn") vào đây
+# sai theo HAI đường, và cả hai đã xảy ra thật:
+#
+#   - Chuỗi KHÔNG khớp docname Address → Frappe xóa trắng chính ô đó rồi throw
+#     LinkValidationError (frappe/model/base_document.py:1146, :1153, :1159) ⇒
+#     không tạo được đơn. Ồn ào, nhưng không mất gì.
+#   - Ô để TRỐNG → base_document.py:1070 `if not docname: continue` ⇒ KHÔNG
+#     fetch, IM LẶNG. Hóa đơn ra đời với sáu ô người mua trống, MISA không phát
+#     hành được vì thiếu tên + MST người mua. Và sau khi ghi sổ thì
+#     base_document.py:1155 (`not self.docstatus.is_submitted()`) không bao giờ
+#     fetch lại — cả sáu ô đều không có `allow_on_submit` — nên KHÔNG CÒN đường
+#     sửa tại chỗ. Đó chính là lý do phải HỦY hóa đơn rồi gửi lại.
+#
+# Vì vậy: tra Address THẬT, và khi không chắc thì TRẢ CẢNH BÁO cho người chọn
+# tay, TUYỆT ĐỐI không đoán gần đúng. Ô này quyết định MST người mua trên một
+# hóa đơn có giá trị pháp lý — khớp gần đúng ở đây là xuất sai mã số thuế.
+
+
+def _ten_key(s):
+	"""Khóa so tên điểm giao: bỏ dấu, hạ chữ, bỏ SẠCH ký tự phân cách.
+
+	Bỏ cả khoảng trắng và dấu chấm, không chỉ chuẩn hoá chúng — nếu không thì
+	"Co.opMart Hà Đông" ra "co opmart ha dong" còn "COOPMART HA DONG" ra
+	"coopmart ha dong", HAI khoá khác nhau cho CÙNG một điểm. Đúng loại trượt
+	âm thầm mà `_ascii_key` ở trên đã phải học một lần (xem MA_CHUOI_FIELDS).
+
+	Bỏ hết phân cách thì về lý có thể gộp hai điểm thật sự khác nhau — nhưng
+	`_resolve_address` chỉ nhận khi DUY NHẤT MỘT kết quả, nên gộp nhầm ra cảnh
+	báo cho người chọn, không ra một lựa chọn sai im lặng.
+	"""
+	t = unicodedata.normalize("NFD", cstr(s))
+	t = "".join(c for c in t if not unicodedata.combining(c))
+	t = t.replace("đ", "d").replace("Đ", "d").lower()
+	return re.sub(r"[^a-z0-9]+", "", t)
+
+
+def _resolve_address(delivered_to, customer):
+	"""(address, canh_bao) cho tên điểm Gemini đọc được.
+
+	`address` là None khi KHÔNG CHẮC; `canh_bao` là câu đọc được để hiện cho
+	người chọn tay. Mọi tầng khớp đều đòi DUY NHẤT MỘT kết quả — chuỗi siêu thị
+	có nhiều điểm trùng tên ở các tỉnh khác nhau (ketoan central_retail.py:81
+	liệt kê 59 tên điểm chỉ có tên viết hoa không dấu), đoán bừa là xuất hóa đơn
+	sai mã số thuế chi nhánh.
+	"""
+	raw = cstr(delivered_to).strip()
+	if not raw:
+		return None, None
+	# Tầng 1 — chính nó đã là docname Address.
+	if frappe.db.exists("Address", raw):
+		return raw, None
+
+	key = _ten_key(raw)
+	if not key:
+		return None, _("Không đọc được tên điểm giao: {0}").format(raw)
+
+	def _nhieu(n):
+		return None, _(
+			"Tên điểm “{0}” khớp {1} địa chỉ khác nhau — chọn tay địa chỉ đúng."
+		).format(raw, n)
+
+	# Tầng 2 — bảng điểm siêu thị của app kế toán. `MT Store.address` CHÍNH LÀ
+	# `shipping_address_name` mà hóa đơn cần (ketoan mt_einv.py::_store_join).
+	# CHỈ ĐỌC — app này không sở hữu bảng đó.
+	if frappe.db.table_exists("MT Store"):
+		flt = {"active": 1}
+		if customer:
+			flt["customer"] = customer
+		rows = frappe.get_all(
+			"MT Store", filters=flt,
+			fields=["store_code", "store_name", "address"], limit_page_length=0,
+		)
+		hit = sorted({
+			r.address for r in rows
+			if r.address and (_ten_key(r.store_code) == key or _ten_key(r.store_name) == key)
+		})
+		if len(hit) == 1:
+			return hit[0], None
+		if len(hit) > 1:
+			return _nhieu(len(hit))
+
+	# Tầng 3 & 4 — tra theo `Address.address_title`, nhưng CHỈ TRONG các Address
+	# của CHÍNH KHÁCH NÀY (Dynamic Link).
+	#
+	# ⚠ TUYỆT ĐỐI không tra `address_title` trên cả bảng Address. Hai khách khác
+	# nhau hoàn toàn có thể có địa chỉ cùng tên ("FujiMart Lê Duẩn" của BRG và
+	# một địa chỉ cùng tên của khách khác), và tra toàn bảng thì trúng DUY NHẤT
+	# MỘT — nên không có cảnh báo nào — mà lại là địa chỉ của khách khác. Ô này
+	# quyết định MST và tên người mua trên hóa đơn có giá trị pháp lý, nên trúng
+	# sai ở đây là xuất hóa đơn cho sai người mua. Phép kiểm mục 5 canh đúng
+	# chuyện này; bản đầu của hàm đã sa vào nó.
+	#
+	# Không biết khách thì DỪNG — thà hỏi người còn hơn đoán.
+	if not customer:
+		return None, _(
+			"Chưa biết khách hàng nên không tra được Địa chỉ giao hàng cho “{0}” — chọn tay."
+		).format(raw)
+
+	links = frappe.get_all(
+		"Dynamic Link",
+		filters={"link_doctype": "Customer", "link_name": customer, "parenttype": "Address"},
+		fields=["parent"], limit_page_length=0,
+	)
+	names = sorted({l.parent for l in links if l.parent})
+	if names:
+		cand = frappe.get_all(
+			"Address", filters={"name": ["in", names]},
+			fields=["name", "address_title"], limit_page_length=0)
+		# Tầng 3 — trùng đúng y chữ.
+		exact = sorted({a.name for a in cand if cstr(a.address_title).strip() == raw})
+		if len(exact) == 1:
+			return exact[0], None
+		if len(exact) > 1:
+			return _nhieu(len(exact))
+		# Tầng 4 — trùng sau khi bỏ dấu.
+		mo = sorted({a.name for a in cand if _ten_key(a.address_title) == key})
+		if len(mo) == 1:
+			return mo[0], None
+		if len(mo) > 1:
+			return _nhieu(len(mo))
+
+	return None, _(
+		"Không tìm ra Địa chỉ giao hàng cho điểm “{0}”. PHẢI chọn tay trên bản nháp "
+		"TRƯỚC khi ghi sổ — ô này quyết định MST và tên người mua trên hóa đơn; "
+		"để trống thì không đẩy được MISA, mà ghi sổ rồi thì phải hủy hóa đơn mới sửa được."
+	).format(raw)
+
+
 # ── Tạo hoá đơn ──────────────────────────────────────────────────────────────
 @frappe.whitelist()
 def create_sales_invoice(header, items):
@@ -408,6 +544,26 @@ def create_sales_invoice(header, items):
 	delivered_to = (header.get("delivered_to") or "").strip()
 	if not customer or not so_po:
 		frappe.throw(_("Thiếu Khách hàng hoặc Số PO."))
+
+	# Chốt chống trùng theo (khách hàng, số PO). KHÔNG có nó thì bấm Tạo đơn hai
+	# lần — hoặc chạy loạt rồi chạy lại sau một lỗi giữa loạt — ra HAI Sales
+	# Invoice cho cùng một phiếu. Dữ liệu thật trên site đã có: PO
+	# 260915-01006-1-0052 của Lotte Mart ra HD-06895 + HD-06896, tên liền số.
+	#
+	# Đây KHÔNG phải chuyện gọn sổ. Mỗi bản tự đẩy ra MỘT số hóa đơn thật, nên
+	# hai bản là hai hóa đơn điện tử có giá trị pháp lý cho một lần bán ⇒ khai
+	# gấp đôi doanh thu và thuế đầu ra, và một tờ nằm ngoài sổ.
+	trung = frappe.get_all(
+		"Sales Invoice",
+		filters={"customer": customer, "custom_po_": so_po, "docstatus": ["<", 2]},
+		fields=["name", "docstatus"], order_by="creation asc", limit_page_length=5,
+	)
+	if trung:
+		frappe.throw(_(
+			"Đã có hóa đơn cho khách {0}, số PO {1}: {2}.\n\n"
+			"KHÔNG tạo thêm — hai hóa đơn cho một phiếu là hai số hóa đơn thật. "
+			"Muốn làm lại thì hủy bản cũ trước; nếu đây thật là đơn khác thì sửa số PO."
+		).format(customer, so_po, ", ".join(r.name for r in trung)))
 
 	missing = []
 	khong_co_ma = 0     # dòng Gemini KHÔNG đọc được mã (itemId rỗng)
@@ -472,11 +628,29 @@ def create_sales_invoice(header, items):
 			"items": si_items,
 		}
 	)
-	if delivered_to:
-		doc.shipping_address_name = delivered_to
+	# Chỉ gán khi tra ra Address THẬT. Tra không ra thì để TRỐNG và trả cảnh báo
+	# — hóa đơn vẫn là bản NHÁP nên người dùng còn chọn tay được, đó là đúng lúc
+	# và đúng chỗ để sửa. Gán chuỗi thô vào ô Link là hoặc chết insert, hoặc ra
+	# một hóa đơn trống thông tin người mua mà ghi sổ rồi thì phải hủy mới sửa.
+	addr, canh_bao_dc = _resolve_address(delivered_to, customer)
+	if addr:
+		doc.shipping_address_name = addr
 	doc.insert()
+
+	# Kiểm NGAY trên bản nháp: thiếu khối người mua thì nói ra bây giờ, đừng để
+	# vỡ lúc bấm xuất hóa đơn (lúc đó hóa đơn đã ghi sổ, không fetch lại được).
+	thieu = [
+		nhan for nhan, f in (
+			(_("MST"), "custom_mã_số_thuế"),
+			(_("tên đơn vị"), "custom_tên_đơn_vị"),
+			(_("tên người mua"), "custom_tên_người_mua"),
+		) if doc.meta.has_field(f) and not cstr(doc.get(f)).strip()
+	]
 	frappe.db.commit()
 	return {
 		"name": doc.name, "missing": missing, "created": len(si_items),
 		"khong_co_ma": khong_co_ma, "kieu_tra": sorted(kieu_tra),
+		"dia_chi": addr or "",
+		"canh_bao_dia_chi": canh_bao_dc or "",
+		"thieu_nguoi_mua": thieu,
 	}
