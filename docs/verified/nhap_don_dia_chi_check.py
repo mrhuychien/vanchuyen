@@ -475,25 +475,46 @@ def main():
           f"{r.get('thieu_nguoi_mua')} / {r.get('canh_bao_dia_chi')}")
 
     # ── 10. Không gộp pháp nhân khác nhau ─────────────────────────────
+    # MST người mua lấy từ ĐỊA CHỈ, không từ Customer (Fields.csv:79), nên gộp
+    # banner ở ô Customer KHÔNG đụng tới số thuế trên hóa đơn. Mọi banner của
+    # Saigon Co.op dùng cùng cột `custom_mã_coopmart`, nên việc CHỌN CỘT MÃ
+    # phải nhận hết — kể cả tên pháp nhân dài kế toán gõ tay.
     print("-" * 78)
-    print("── 10. Co.opXtra / Co.op Food KHÔNG được gộp vào “Coopmart” ────────")
+    print("── 10. Banner Co.op: gộp ở tên Customer, và LUÔN tra cột mã Co.op ──")
     try:
-        d = run_js("""() => ({
-          xtra: canonCustomer('Co.opXtra'), food: canonCustomer('Co.op Food'),
-          coop: canonCustomer('Co.opMart'), go: canonCustomer('GO!'),
-          bigc: canonCustomer('Big C'),
-        })""")
-        check("Co.opXtra giữ nguyên, KHÔNG thành “Coopmart”",
-              d["xtra"] != "Coopmart", d["xtra"])
-        check("Co.op Food giữ nguyên, KHÔNG thành “Coopmart”",
-              d["food"] != "Coopmart", d["food"])
-        check("Co.opMart vẫn về “Coopmart” (đúng pháp nhân, không được phá)",
-              d["coop"] == "Coopmart", d["coop"])
+        d = run_js("""() => {
+          const ten = ['Co.opMart', 'Co.opXtra', 'Co.op Food', 'Co.opExtra', 'Saigon Co.op'];
+          const dai = ['Co.opXtra Linh Trung', 'TNHH MTV Co.opMart Hà Nội',
+                       'Chi nhánh Liên hiệp HTX Co.op Food'];
+          const khac = ['Winmart', 'BigC', 'Lotte Mart', 'EMART', 'BRG Retail', 'AEON'];
+          return {
+            canon: ten.map(canonCustomer),
+            lt: ten.map((c) => lookupTypeFor(canonCustomer(c))),
+            ltDai: dai.map(lookupTypeFor),
+            canonDai: dai.map(canonCustomer),
+            ltKhac: khac.map((c) => lookupTypeFor(canonCustomer(c))),
+            go: canonCustomer('GO!'), bigc: canonCustomer('Big C'),
+            mm: lookupTypeFor(canonCustomer('MM Mega Market')),
+          };
+        }""")
+        check("mọi banner Co.op về cùng tên Customer “Coopmart”",
+              d["canon"] == ["Coopmart"] * 5, str(d["canon"]))
+        check("và đều tra cột mã Co.opmart", d["lt"] == ["coopmart"] * 5, str(d["lt"]))
+        # Đây là chốt QUAN TRỌNG NHẤT của mục này: kế toán sửa tay ô Khách hàng
+        # thành TÊN PHÁP NHÂN DÀI thì vẫn phải tra cột mã Co.op, không rơi về
+        # barcode. Bản trước gộp hai việc làm một nên chỗ này rơi lưới.
+        check("tên pháp nhân DÀI -> vẫn tra cột mã Co.op, KHÔNG rơi về barcode",
+              d["ltDai"] == ["coopmart"] * 3, str(d["ltDai"]))
+        check("tên pháp nhân dài thì GIỮ NGUYÊN ở ô Customer (không tự gộp)",
+              all(x != "Coopmart" for x in d["canonDai"]), str(d["canonDai"]))
+        check("các chuỗi khác vẫn tra barcode (không kéo cả nhà sang coopmart)",
+              d["ltKhac"] == ["barcode"] * 6, str(d["ltKhac"]))
+        check("Mega Market vẫn ra megamarket", d["mm"] == "megamarket", d["mm"])
         # GO! và Big C là CÙNG pháp nhân EB — SOP_ke_toan_MT_RVHG.md:87.
         check("GO! vẫn gộp về BigC (cùng pháp nhân EB, SOP mục 2.1)",
               d["go"] == "BigC" and d["bigc"] == "BigC", f"{d['go']} / {d['bigc']}")
     except Exception as e:  # noqa: BLE001
-        check("chạy được canonCustomer", False, str(e)[:90])
+        check("chạy được canonCustomer / lookupTypeFor", False, str(e)[:90])
 
     # ── 11. Giao diện phải NÓI RA việc còn phải làm ───────────────────
     #

@@ -336,21 +336,36 @@ async function handleFileClick(index) {
 //
 // Giá trị trả về là TÊN CANONICAL, vì nó đi thẳng vào field `customer` của
 // Sales Invoice (Link → Customer) chứ không chỉ để điều hướng.
-// ⚠ CHỈ gộp các cách viết của CÙNG MỘT pháp nhân. Giá trị trả về đi thẳng vào
-// field `customer` (Link → Customer), tức quyết định sổ công nợ và hạn thanh
-// toán — `docs/mt/SOP_ke_toan_MT_RVHG.md:116` ghi "Hạn: theo pháp nhân — cấu
-// hình đúng trên Customer".
+// ── HAI VIỆC KHÁC NHAU, ĐỪNG GỘP LÀM MỘT ────────────────────────────────────
 //
-// Co.opXtra / Co.op Food CỐ Ý KHÔNG nằm trong rổ "Coopmart": SOP mục 2.4 ghi
-// Saigon Co.op có ~8 PHÁP NHÂN riêng (chi nhánh Liên hiệp + các công ty TNHH
-// thành viên), mỗi pháp nhân một bảng kê. Gộp chúng lại là dồn công nợ của
-// nhiều pháp nhân vào một sổ con. Tên lạ thì cứ để `canonCustomer` trả nguyên
-// văn và Frappe báo không tìm thấy Customer — ỒN ÀO còn hơn SAI ÂM THẦM.
+// (A) `canonCustomer` -> TÊN RECORD Customer, đi thẳng vào ô `customer`
+//     (Link → Customer). Nó quyết định sổ công nợ và hạn thanh toán, nên phải
+//     CHẶT: khớp đúng y khoá, không nhận ra thì giữ nguyên văn cho người sửa
+//     và để Frappe báo không tìm thấy Customer — ồn ào còn hơn sai âm thầm.
 //
-// BigC/GO! thì NGƯỢC LẠI, gộp được: SOP mục 2.1 ghi rõ cùng pháp nhân EB
-// (tối thiểu 2 mã NCC 3003172 / 3006634).
+// (B) `lookupTypeFor` -> CHỌN CỘT MÃ trên Item để tra. Việc này NỚI được, và
+//     nên nới: chọn sai cột thì ra "không tìm thấy mã" kèm câu lỗi rõ ràng,
+//     KHÔNG BAO GIỜ ra một mã số thuế sai. Nên nó khớp theo HỌ CHUỖI.
+//
+// Vì sao phân biệt quan trọng: MST người mua trên hoá đơn KHÔNG lấy từ
+// Customer mà lấy từ ĐỊA CHỈ GIAO HÀNG (docs/legacy/Fields.csv dòng 79:
+// `custom_mã_số_thuế ← shipping_address_name.custom_mã_số_thuế`). Nên dù kế
+// toán có mở Customer riêng cho từng pháp nhân Co.op (SOP mục 2.4: ~8 pháp
+// nhân, mỗi pháp nhân một bảng kê) thì hoá đơn vẫn mang MST của chi nhánh
+// theo đúng địa chỉ — việc gộp/không gộp ở (A) không hề đụng tới số thuế.
+//
+// Mọi banner của Saigon Co.op (Co.opmart / Co.opXtra / Co.op Food) dùng CÙNG
+// cột `custom_mã_coopmart` trên Item, nên (B) phải nhận hết. Trước đây hai
+// việc này dùng chung một bảng, nên bỏ một alias ở (A) là lặng lẽ làm (B)
+// rơi về tra barcode — đúng con bug Coopmart vừa phải sửa.
+function _khoaTen(raw) {
+	return String(raw || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+// (A) — khớp ĐÚNG Y khoá.
 const CHUOI_MAP = [
-	["Coopmart", ["coopmart", "coop", "coopmartvn", "saigoncoop", "saigoncoopmart"]],
+	["Coopmart", ["coopmart", "coop", "coopmartvn", "saigoncoop", "saigoncoopmart",
+		"coopxtra", "coopextra", "coopfood"]],
 	["Mega Market", ["megamarket", "mmmegamarket", "mm", "mmmega"]],
 	["BigC", ["bigc", "bigcvietnam", "bigcvn", "gomarket", "go"]],
 	["Lotte Mart", ["lottemart", "lotte"]],
@@ -360,16 +375,23 @@ const CHUOI_MAP = [
 	["AEON", ["aeon", "aeonvietnam", "aeonvn", "aeonhcm"]],
 ];
 
+// (B) — khớp theo HỌ CHUỖI, nhận cả tên pháp nhân dài mà kế toán gõ tay
+// ("Co.opXtra Linh Trung", "TNHH MTV Co.opMart Hà Nội"…).
+const HO_CHUOI = [
+	["coopmart", ["coop"]],
+	["megamarket", ["megamarket", "mmmega"]],
+];
+
 function canonCustomer(raw) {
-	const k = String(raw || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+	const k = _khoaTen(raw);
 	if (!k) return "";
 	for (const [ten, keys] of CHUOI_MAP) if (keys.includes(k)) return ten;
 	return String(raw || "").trim(); // không nhận ra → giữ nguyên để người sửa
 }
 
 function lookupTypeFor(customer) {
-	if (customer === "Coopmart") return "coopmart";
-	if (customer === "Mega Market") return "megamarket";
+	const k = _khoaTen(customer);
+	for (const [lt, pats] of HO_CHUOI) if (pats.some((p) => k.includes(p))) return lt;
 	return "barcode";
 }
 
