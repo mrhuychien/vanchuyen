@@ -475,15 +475,21 @@ def main():
           f"{r.get('thieu_nguoi_mua')} / {r.get('canh_bao_dia_chi')}")
 
     # ── 10. Không gộp pháp nhân khác nhau ─────────────────────────────
-    # MST người mua lấy từ ĐỊA CHỈ, không từ Customer (Fields.csv:79), nên gộp
-    # banner ở ô Customer KHÔNG đụng tới số thuế trên hóa đơn. Mọi banner của
-    # Saigon Co.op dùng cùng cột `custom_mã_coopmart`, nên việc CHỌN CỘT MÃ
-    # phải nhận hết — kể cả tên pháp nhân dài kế toán gõ tay.
+    # Hai dữ kiện đã xác minh: (1) MST lấy từ ĐỊA CHỈ, không từ Customer
+    # (Fields.csv:79) nên gộp banner không đụng số thuế; (2) hệ thống có ĐÚNG
+    # MỘT Customer dùng chung cho cả Saigon Co.op (chủ hệ thống xác nhận
+    # 08/10/2026) — SOP "~8 pháp nhân" là chuyện ĐỐI SOÁT, không phải số
+    # Customer record. Nên gộp mọi banner về "Coopmart" là ĐÚNG master.
+    #
+    # Việc CHỌN CỘT MÃ vẫn khớp theo họ chuỗi, để ô Khách hàng bị gõ tay thành
+    # tên lạ mang chữ "Co.op" cũng không rơi về tra barcode.
     print("-" * 78)
     print("── 10. Banner Co.op: gộp ở tên Customer, và LUÔN tra cột mã Co.op ──")
     try:
         d = run_js("""() => {
           const ten = ['Co.opMart', 'Co.opXtra', 'Co.op Food', 'Co.opExtra', 'Saigon Co.op'];
+          // Tên gõ tay lạ: KHÔNG có Customer nào như vậy, nên (A) phải giữ
+          // nguyên cho Frappe báo lỗi, mà (B) vẫn phải tra cột mã Co.op.
           const dai = ['Co.opXtra Linh Trung', 'TNHH MTV Co.opMart Hà Nội',
                        'Chi nhánh Liên hiệp HTX Co.op Food'];
           const khac = ['Winmart', 'BigC', 'Lotte Mart', 'EMART', 'BRG Retail', 'AEON'];
@@ -503,9 +509,9 @@ def main():
         # Đây là chốt QUAN TRỌNG NHẤT của mục này: kế toán sửa tay ô Khách hàng
         # thành TÊN PHÁP NHÂN DÀI thì vẫn phải tra cột mã Co.op, không rơi về
         # barcode. Bản trước gộp hai việc làm một nên chỗ này rơi lưới.
-        check("tên pháp nhân DÀI -> vẫn tra cột mã Co.op, KHÔNG rơi về barcode",
+        check("tên gõ tay lạ mang chữ Co.op -> vẫn tra cột mã Co.op, không rơi barcode",
               d["ltDai"] == ["coopmart"] * 3, str(d["ltDai"]))
-        check("tên pháp nhân dài thì GIỮ NGUYÊN ở ô Customer (không tự gộp)",
+        check("tên gõ tay lạ thì GIỮ NGUYÊN ở ô Customer để Frappe báo lỗi",
               all(x != "Coopmart" for x in d["canonDai"]), str(d["canonDai"]))
         check("các chuỗi khác vẫn tra barcode (không kéo cả nhà sang coopmart)",
               d["ltKhac"] == ["barcode"] * 6, str(d["ltKhac"]))

@@ -347,17 +347,29 @@ async function handleFileClick(index) {
 //     nên nới: chọn sai cột thì ra "không tìm thấy mã" kèm câu lỗi rõ ràng,
 //     KHÔNG BAO GIỜ ra một mã số thuế sai. Nên nó khớp theo HỌ CHUỖI.
 //
-// Vì sao phân biệt quan trọng: MST người mua trên hoá đơn KHÔNG lấy từ
-// Customer mà lấy từ ĐỊA CHỈ GIAO HÀNG (docs/legacy/Fields.csv dòng 79:
-// `custom_mã_số_thuế ← shipping_address_name.custom_mã_số_thuế`). Nên dù kế
-// toán có mở Customer riêng cho từng pháp nhân Co.op (SOP mục 2.4: ~8 pháp
-// nhân, mỗi pháp nhân một bảng kê) thì hoá đơn vẫn mang MST của chi nhánh
-// theo đúng địa chỉ — việc gộp/không gộp ở (A) không hề đụng tới số thuế.
+// ── HAI DỮ KIỆN ĐÃ XÁC MINH, ĐỪNG TRANH LUẬN LẠI ────────────────────────
 //
-// Mọi banner của Saigon Co.op (Co.opmart / Co.opXtra / Co.op Food) dùng CÙNG
-// cột `custom_mã_coopmart` trên Item, nên (B) phải nhận hết. Trước đây hai
-// việc này dùng chung một bảng, nên bỏ một alias ở (A) là lặng lẽ làm (B)
-// rơi về tra barcode — đúng con bug Coopmart vừa phải sửa.
+// 1. MST người mua trên hoá đơn KHÔNG lấy từ Customer mà lấy từ ĐỊA CHỈ GIAO
+//    HÀNG — docs/legacy/Fields.csv dòng 79:
+//    `custom_mã_số_thuế ← shipping_address_name.custom_mã_số_thuế`.
+//    Nên việc gộp hay không gộp banner ở (A) KHÔNG hề đụng tới số thuế.
+// 2. Trên hệ thống có ĐÚNG MỘT Customer dùng chung cho cả Saigon Co.op (chủ
+//    hệ thống xác nhận 08/10/2026). SOP mục 2.4 nói ~8 PHÁP NHÂN Co.op mỗi
+//    bên gửi một bảng kê — đó là chuyện ĐỐI SOÁT THANH TOÁN, không phải là
+//    số Customer record. Hai thứ khác nhau; lẫn chúng là chỗ đã làm hỏng một
+//    lần (xem f4af77e).
+//
+// ⇒ Gộp mọi banner Saigon Co.op về "Coopmart" là ĐÚNG, khớp đúng master.
+//
+// Mọi banner của Saigon Co.op (Co.opmart / Co.opXtra / Co.op Food) cũng dùng
+// CÙNG cột `custom_mã_coopmart` trên Item, nên (B) phải nhận hết. Trước đây
+// hai việc dùng chung một bảng, nên bỏ một alias ở (A) là lặng lẽ làm (B) rơi
+// về tra barcode — đúng con bug Coopmart vừa phải sửa.
+//
+// (B) vẫn khớp theo họ chuỗi dù (A) đã đủ: nó đỡ cho trường hợp ô Khách hàng
+// bị gõ tay thành một tên lạ mang chữ "Co.op". Khi đó (A) giữ nguyên tên để
+// Frappe báo không tìm thấy Customer — ồn ào, đúng ý — mà việc tra mã vẫn
+// không rơi về barcode.
 function _khoaTen(raw) {
 	return String(raw || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
