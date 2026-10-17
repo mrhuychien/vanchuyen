@@ -1329,3 +1329,179 @@
 .vc-hide {
 	display: none !important;
 }
+
+/* ── Thu hồi hàng (#/thu-hoi) ──────────────────────────────────────────────── */
+/* Thanh 7 nấc: 3 nấc vận chuyển (xanh) + 4 nấc kế toán (tím). Nấc hiện tại có viền. */
+.vc-th-steps {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 3px;
+	margin-top: 0.5rem;
+}
+.vc-th-step {
+	height: 6px;
+	border-radius: 3px;
+	background: var(--vc-surface-2);
+}
+.vc-th-step-vc.vc-th-step-on {
+	background: var(--vc-accent-1);
+}
+.vc-th-step-kt.vc-th-step-on {
+	background: #7c3aed;
+}
+.vc-th-step-cur {
+	box-shadow: 0 0 0 2px var(--vc-surface), 0 0 0 3px currentColor;
+	color: var(--vc-text-3);
+}
+.vc-th-sec {
+	margin-bottom: 0.75rem;
+}
+.vc-th-grid {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 0 0.75rem;
+}
+@media (min-width: 640px) {
+	.vc-th-grid {
+		grid-template-columns: 1fr 1fr;
+	}
+}
+.vc-th-note {
+	padding: 0.6rem 0.75rem;
+	border-radius: var(--vc-radius-sm);
+	background: #fff7e6;
+	color: #7a4b00;
+	font-size: 0.82rem;
+	font-weight: 600;
+}
+/* Thẻ chọn (khách / điểm / mã hàng): cả thẻ là MỘT vùng bấm. */
+.vc-th-diem {
+	display: block;
+	width: 100%;
+	text-align: left;
+	padding: 0.6rem 0.75rem;
+	margin-top: 0.4rem;
+	border-radius: var(--vc-radius-sm);
+	border: 1px solid var(--vc-border);
+	background: var(--vc-surface);
+	font-family: inherit;
+	color: var(--vc-text);
+	cursor: pointer;
+}
+.vc-th-diem-on {
+	border-color: var(--vc-accent-1);
+	background: #eef4ff;
+}
+.vc-th-diem-list {
+	max-height: 320px;
+	overflow-y: auto;
+}
+.vc-th-rows {
+	display: flex;
+	flex-direction: column;
+	margin-top: 0.5rem;
+}
+.vc-th-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 5.5rem 6.5rem 40px;
+	gap: 0.4rem;
+	align-items: center;
+	padding: 0.45rem 0;
+	border-bottom: 1px solid var(--vc-border);
+}
+.vc-th-row:last-child {
+	border-bottom: 0;
+}
+.vc-th-row-name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.vc-th-qty,
+.vc-th-uom {
+	padding-left: 0.5rem;
+	padding-right: 0.5rem;
+}
+.vc-th-files {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+	gap: 0.5rem;
+}
+.vc-th-file {
+	position: relative;
+	border: 1px solid var(--vc-border);
+	border-radius: var(--vc-radius-sm);
+	overflow: hidden;
+	background: var(--vc-surface-2);
+}
+.vc-th-file a {
+	display: block;
+	color: var(--vc-text);
+	text-decoration: none;
+}
+.vc-th-file img,
+.vc-th-file-icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	height: 90px;
+	object-fit: cover;
+	font-size: 2rem;
+	color: var(--vc-text-3);
+}
+.vc-th-file-name {
+	padding: 0.25rem 0.4rem;
+	font-size: 0.72rem;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.vc-th-file-x {
+	position: absolute;
+	top: 2px;
+	right: 2px;
+	width: 28px;
+	height: 28px;
+	background: rgba(255, 255, 255, 0.9);
+}
+/* Thanh nút dính đáy: trên mobile đứng NGAY TRÊN bottom-nav, không chồng lên nó. */
+.vc-th-actions {
+	position: sticky;
+	bottom: calc(var(--vc-bottom-h) + 8px);
+	z-index: 20;
+	display: flex;
+	gap: 0.5rem;
+	padding: 0.6rem;
+	border-radius: var(--vc-radius-md);
+	background: rgba(255, 255, 255, 0.95);
+	border: 1px solid var(--vc-border);
+	box-shadow: var(--vc-shadow-md);
+}
+@media (min-width: 768px) {
+	.vc-th-actions {
+		bottom: 8px;
+	}
+}
+.vc-th-qty,
+.vc-th-uom,
+.vc-th-diem-list input {
+	font-size: 16px; /* dưới 16px iOS tự phóng to khi gõ và không thu lại */
+}
+/* Link mang class nút (Chi tiết, Tạo yêu cầu…) không gạch chân như link chữ. */
+a.vc-btn-primary,
+a.vc-btn-ghost,
+a.vc-btn-success,
+a.vc-btn-danger {
+	text-decoration: none;
+}
+/* Màn hẹp: tên hàng chiếm trọn hàng trên, số lượng + ĐVT + xóa xuống hàng dưới —
+   bốn cột trên 390px bóp tên hàng thành 4 dòng và cắt chữ trong ô ĐVT. */
+@media (max-width: 479px) {
+	.vc-th-row {
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 40px;
+	}
+	.vc-th-row-name {
+		grid-column: 1 / -1;
+	}
+}

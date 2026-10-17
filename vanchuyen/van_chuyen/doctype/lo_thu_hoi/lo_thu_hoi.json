@@ -1,0 +1,322 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-10-17 09:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "trang_thai",
+  "ngay_yeu_cau",
+  "so_phieu_sieu_thi",
+  "ly_do",
+  "col_break_head",
+  "customer",
+  "customer_name",
+  "shipping_address_name",
+  "ten_diem",
+  "ma_diem",
+  "dia_chi",
+  "sdt_diem",
+  "sec_lien_he",
+  "nguoi_lien_he",
+  "sdt_lien_he",
+  "col_break_lien_he",
+  "ghi_chu",
+  "sec_dieu_phoi",
+  "ngay_hen_lay",
+  "lai_xe",
+  "ten_lai_xe",
+  "sdt_lai_xe",
+  "col_break_dieu_phoi",
+  "xe",
+  "chuyen_xe",
+  "so_kien_du_kien",
+  "sec_tien_do",
+  "lay_luc",
+  "lay_boi",
+  "col_break_tien_do",
+  "nhan_luc",
+  "nhan_boi",
+  "so_kien_nhan",
+  "sec_hang",
+  "items",
+  "tong_sl_khai",
+  "col_break_hang",
+  "gia_tri_khai",
+  "so_dinh_kem"
+ ],
+ "fields": [
+  {
+   "default": "TH-.YYYY.-.####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "TH-.YYYY.-.####",
+   "print_hide": 1,
+   "set_only_once": 1
+  },
+  {
+   "default": "Tạo yêu cầu",
+   "description": "CHỈ code ghi (portal /vc#/thu-hoi). Ba chặng của bên vận chuyển; từ 'Đã nhận hàng' trở đi kế toán tiếp nối bằng phiếu kiểm hàng.",
+   "fieldname": "trang_thai",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Trạng thái vận chuyển",
+   "options": "Tạo yêu cầu\nĐã lấy hàng\nĐã nhận hàng",
+   "read_only": 1
+  },
+  {
+   "default": "Today",
+   "description": "Ngày siêu thị gọi trả / ngày trên phiếu xuất trả — KHÔNG phải ngày nhập phiếu. Tuổi của lô tính từ ngày này.",
+   "fieldname": "ngay_yeu_cau",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Ngày yêu cầu",
+   "reqd": 1
+  },
+  {
+   "fieldname": "so_phieu_sieu_thi",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Số phiếu xuất trả (siêu thị)"
+  },
+  {
+   "fieldname": "ly_do",
+   "fieldtype": "Select",
+   "label": "Lý do trả",
+   "options": "\nHàng date / cận date\nHàng thời vụ\nHàng lỗi, hư hỏng\nĐổi hàng\nKhác"
+  },
+  {
+   "fieldname": "col_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Khách hàng",
+   "options": "Customer",
+   "reqd": 1
+  },
+  {
+   "fieldname": "customer_name",
+   "fieldtype": "Data",
+   "label": "Tên khách",
+   "read_only": 1
+  },
+  {
+   "description": "Address THẬT của chính khách này (Dynamic Link) — điểm siêu thị trả hàng. Kế toán dựng hóa đơn trả về trên đúng khách + điểm này.",
+   "fieldname": "shipping_address_name",
+   "fieldtype": "Link",
+   "label": "Điểm lấy hàng (địa chỉ)",
+   "options": "Address",
+   "reqd": 1
+  },
+  {
+   "fieldname": "ten_diem",
+   "fieldtype": "Data",
+   "label": "Tên điểm",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ma_diem",
+   "fieldtype": "Data",
+   "label": "Mã điểm (MT Store)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "dia_chi",
+   "fieldtype": "Small Text",
+   "label": "Địa chỉ chi tiết",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sdt_diem",
+   "fieldtype": "Data",
+   "label": "SĐT điểm",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_lien_he",
+   "fieldtype": "Section Break",
+   "label": "Liên hệ & ghi chú"
+  },
+  {
+   "fieldname": "nguoi_lien_he",
+   "fieldtype": "Data",
+   "label": "Người liên hệ ở điểm"
+  },
+  {
+   "fieldname": "sdt_lien_he",
+   "fieldtype": "Data",
+   "label": "SĐT liên hệ"
+  },
+  {
+   "fieldname": "col_break_lien_he",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "ghi_chu",
+   "fieldtype": "Small Text",
+   "label": "Ghi chú"
+  },
+  {
+   "fieldname": "sec_dieu_phoi",
+   "fieldtype": "Section Break",
+   "label": "Điều phối lấy hàng"
+  },
+  {
+   "fieldname": "ngay_hen_lay",
+   "fieldtype": "Date",
+   "label": "Ngày hẹn lấy"
+  },
+  {
+   "fieldname": "lai_xe",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Lái xe",
+   "options": "Driver"
+  },
+  {
+   "fieldname": "ten_lai_xe",
+   "fieldtype": "Data",
+   "label": "Tên lái xe",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sdt_lai_xe",
+   "fieldtype": "Data",
+   "label": "SĐT lái xe",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_dieu_phoi",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "xe",
+   "fieldtype": "Link",
+   "label": "Xe",
+   "options": "Vehicle"
+  },
+  {
+   "description": "Tùy chọn: xe đi giao rồi ghé lấy hàng trả trên đường về.",
+   "fieldname": "chuyen_xe",
+   "fieldtype": "Link",
+   "label": "Đi kèm chuyến",
+   "options": "Chuyen Xe"
+  },
+  {
+   "fieldname": "so_kien_du_kien",
+   "fieldtype": "Float",
+   "label": "Số kiện dự kiến"
+  },
+  {
+   "fieldname": "sec_tien_do",
+   "fieldtype": "Section Break",
+   "label": "Tiến độ"
+  },
+  {
+   "fieldname": "lay_luc",
+   "fieldtype": "Datetime",
+   "label": "Lúc lấy hàng",
+   "read_only": 1
+  },
+  {
+   "fieldname": "lay_boi",
+   "fieldtype": "Data",
+   "label": "Người xác nhận lấy hàng",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_tien_do",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "nhan_luc",
+   "fieldtype": "Datetime",
+   "label": "Lúc nhận hàng tại công ty",
+   "read_only": 1
+  },
+  {
+   "fieldname": "nhan_boi",
+   "fieldtype": "Data",
+   "label": "Người nhận hàng",
+   "read_only": 1
+  },
+  {
+   "description": "Đếm lúc hàng xuống xe. Lệch với số kiện dự kiến thì hỏi lái xe NGAY, đừng để kế toán kiểm hàng mới thấy.",
+   "fieldname": "so_kien_nhan",
+   "fieldtype": "Float",
+   "label": "Số kiện thực nhận"
+  },
+  {
+   "fieldname": "sec_hang",
+   "fieldtype": "Section Break",
+   "label": "Hàng siêu thị khai trả"
+  },
+  {
+   "description": "Theo phiếu xuất trả của siêu thị — số KHAI, không phải số đếm. Kế toán kiểm hàng đếm riêng rồi mới so.",
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Mã hàng siêu thị khai",
+   "options": "Lo Thu Hoi Hang"
+  },
+  {
+   "fieldname": "tong_sl_khai",
+   "fieldtype": "Float",
+   "label": "Tổng SL khai (ĐVT kho)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_hang",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "gia_tri_khai",
+   "fieldtype": "Currency",
+   "label": "Giá trị theo phiếu siêu thị"
+  },
+  {
+   "default": "0",
+   "fieldname": "so_dinh_kem",
+   "fieldtype": "Int",
+   "label": "Số file đính kèm",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "is_submittable": 0,
+ "links": [],
+ "modified": "2026-10-17 09:00:00",
+ "module": "Van Chuyen",
+ "name": "Lo Thu Hoi",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "show_title_field_in_link": 0,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "ten_diem",
+ "track_changes": 1
+}

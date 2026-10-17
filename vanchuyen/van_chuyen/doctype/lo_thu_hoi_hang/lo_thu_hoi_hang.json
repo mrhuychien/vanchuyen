@@ -1,0 +1,97 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-10-17 09:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "item_code",
+  "item_name",
+  "uom",
+  "qty",
+  "col_break_quy_doi",
+  "conversion_factor",
+  "stock_qty",
+  "stock_uom",
+  "ghi_chu"
+ ],
+ "fields": [
+  {
+   "columns": 2,
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Mã hàng",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "columns": 3,
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Tên hàng",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "description": "Đơn vị ghi trên phiếu siêu thị. Bỏ trống = ĐVT kho.",
+   "fieldname": "uom",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "ĐVT",
+   "options": "UOM"
+  },
+  {
+   "columns": 1,
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "SL siêu thị khai",
+   "reqd": 1
+  },
+  {
+   "fieldname": "col_break_quy_doi",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "conversion_factor",
+   "fieldtype": "Float",
+   "label": "Hệ số quy đổi",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "stock_qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "SL khai (ĐVT kho)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stock_uom",
+   "fieldtype": "Link",
+   "label": "ĐVT kho",
+   "options": "UOM",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ghi_chu",
+   "fieldtype": "Data",
+   "label": "Ghi chú"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-17 09:00:00",
+ "modified_by": "Administrator",
+ "module": "Van Chuyen",
+ "name": "Lo Thu Hoi Hang",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

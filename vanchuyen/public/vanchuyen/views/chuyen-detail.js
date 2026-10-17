@@ -3,6 +3,7 @@ import { call, upload, errText } from "../lib/api.js";
 import { skeleton } from "../lib/dom.js";
 import { escapeHtml, formatDate, formatQty, formatM3 } from "../lib/format.js";
 import { showToast } from "../components/toast.js";
+import { resizeImage } from "../lib/anh.js";
 
 let TRIP = null;
 
@@ -176,31 +177,6 @@ async function handlePhoto(input, rowName, badge, stop) {
 		showToast(errText(e), "error");
 	}
 	input.value = "";
-}
-
-// Resize canvas max 1200px + JPEG q≈0.8 TRƯỚC khi upload (lái xe vùng sóng yếu).
-function resizeImage(file, maxDim, quality) {
-	return new Promise((resolve, reject) => {
-		const img = new Image();
-		img.onload = () => {
-			let { width, height } = img;
-			if (width > height && width > maxDim) {
-				height = Math.round((height * maxDim) / width);
-				width = maxDim;
-			} else if (height >= width && height > maxDim) {
-				width = Math.round((width * maxDim) / height);
-				height = maxDim;
-			}
-			const c = document.createElement("canvas");
-			c.width = width;
-			c.height = height;
-			c.getContext("2d").drawImage(img, 0, 0, width, height);
-			c.toBlob((b) => (b ? resolve(b) : reject(new Error("Nén ảnh thất bại"))), "image/jpeg", quality);
-			URL.revokeObjectURL(img.src);
-		};
-		img.onerror = () => reject(new Error("Không đọc được ảnh"));
-		img.src = URL.createObjectURL(file);
-	});
 }
 
 function errBox(msg) {

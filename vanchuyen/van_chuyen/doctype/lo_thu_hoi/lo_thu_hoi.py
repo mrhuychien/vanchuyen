@@ -1,0 +1,257 @@
+"""Lo Thu Hoi — MỘT LẦN khách (siêu thị) gọi trả hàng: đi lấy, rồi nhận về kho.
+
+════════════════════════════════════════════════════════════════════════════
+BA CHẶNG CỦA VẬN CHUYỂN, BA CHẶNG CỦA KẾ TOÁN
+════════════════════════════════════════════════════════════════════════════
+
+    Tạo yêu cầu → Đã lấy hàng → Đã nhận hàng          (bảng này, app này ghi)
+    → Đang kiểm → Đã kiểm hàng → Đã nhập chứng từ → Xong (`Kiem Hang Thu Hoi`, ketoan ghi)
+
+Bảng này KHÔNG có cột cho ba chặng sau, và đó là chủ đích: mỗi app chỉ ghi bảng
+của mình (cùng luật với `Su Co Van Chuyen` ↔ `MT Hang Hoan`). Màn hình hiện
+trạng thái TỔNG bằng cách ĐỌC MỀM phiếu kiểm bên kia — `phieu_kiem()` dưới đây.
+Site chưa cài ketoan thì lô dừng ở "Đã nhận hàng", không nổ.
+
+════════════════════════════════════════════════════════════════════════════
+ĐỊA CHỈ PHẢI LÀ ĐỊA CHỈ CỦA CHÍNH KHÁCH NÀY
+════════════════════════════════════════════════════════════════════════════
+
+`shipping_address_name` là điểm siêu thị trả hàng, và kế toán dựng hóa đơn trả
+về trên đúng khách + điểm đó (hóa đơn gốc cùng điểm được gợi ý trước). Saigon
+Co.op chỉ có MỘT Customer cho ~mọi điểm, nên ô khách đúng mà ô điểm sai là
+chuyện dễ xảy ra nhất — và nó trôi thẳng sang chứng từ. Chặn ở `validate` bằng
+Dynamic Link, không tin client.
+
+════════════════════════════════════════════════════════════════════════════
+KẾ TOÁN ĐÃ MỞ PHIẾU KIỂM THÌ KHÓA KHÁCH / ĐIỂM / CHẶNG
+════════════════════════════════════════════════════════════════════════════
+
+Phiếu kiểm chép khách + điểm lúc mở, rồi hóa đơn trả về dựng trên đó. Cho đổi
+khách ở đây sau lúc ấy là hai bảng nói về hai khách khác nhau mà không bảng nào
+biết. Lùi chặng ("chưa nhận hàng") khi hàng đã được đếm cũng vậy.
+"""
+
+import frappe
+from frappe import _
+from frappe.model.document import Document
+from frappe.utils import cstr, flt
+
+TAO = "Tạo yêu cầu"
+DA_LAY = "Đã lấy hàng"
+DA_NHAN = "Đã nhận hàng"
+TRANG_THAI = (TAO, DA_LAY, DA_NHAN)
+
+# Phiếu kiểm hàng bên ketoan — CHỈ ĐỌC, và đọc MỀM.
+KIEM_DT = "Kiem Hang Thu Hoi"
+DANG_KIEM = "Đang kiểm"
+CHANG_KE_TOAN = (DANG_KIEM, "Đã kiểm hàng", "Đã nhập chứng từ", "Xong")
+# Thứ tự 7 chặng tổng. Một chỗ khai, mọi màn đọc — xếp danh sách, vẽ pill, vẽ
+# thanh tiến độ đều theo đúng thứ tự này.
+CHANG = TRANG_THAI + CHANG_KE_TOAN
+
+EPS = 0.0001
+
+
+def phieu_kiem(lo_names):
+	"""{tên lô: trạng thái phiếu kiểm bên ketoan}. Site chưa có ketoan → {}.
+
+	Trạng thái rỗng (bản ketoan cũ chưa kịp ghi) đọc là "Đang kiểm": phiếu đã mở
+	là việc đã bắt đầu, hiện nó thành "Đã nhận hàng" là giấu người đang đếm.
+	"""
+	names = [n for n in (lo_names or []) if n]
+	if not names or not frappe.db.table_exists(KIEM_DT):
+		return {}
+	# SQL thô: bảng của app khác, không có meta để đi qua ORM khi app đó vắng mặt.
+	rows = frappe.db.sql(
+		f"SELECT lo_thu_hoi, trang_thai FROM `tab{KIEM_DT}` WHERE lo_thu_hoi IN %(n)s",
+		{"n": tuple(names)},
+		as_dict=True,
+	)
+	return {r.lo_thu_hoi: cstr(r.trang_thai) or DANG_KIEM for r in rows}
+
+
+def dia_chi_cua_khach(address, customer):
+	"""Address có Dynamic Link tới đúng Customer này không."""
+	if not address or not customer:
+		return False
+	return bool(
+		frappe.db.exists(
+			"Dynamic Link",
+			{
+				"parenttype": "Address",
+				"parent": address,
+				"link_doctype": "Customer",
+				"link_name": customer,
+			},
+		)
+	)
+
+
+def format_dia_chi(a):
+	"""Một dòng đọc được: số nhà, đường, phường/quận, tỉnh. Bỏ phần trống."""
+	if not a:
+		return ""
+	parts = [cstr(a.get(f)).strip() for f in ("address_line1", "address_line2", "city", "county", "state")]
+	out = []
+	for p in parts:
+		if p and p not in out:
+			out.append(p)
+	return ", ".join(out)
+
+
+def ma_diem_mt(address, customer):
+	"""(mã điểm, tên điểm) theo bảng `MT Store` của ketoan — đọc mềm.
+
+	`MT Store.address` CHÍNH LÀ `shipping_address_name` (như `nhap_don._resolve_address`
+	đã dựa vào). Không có bảng / không có dòng → ("", "").
+	"""
+	if not address or not frappe.db.table_exists("MT Store"):
+		return "", ""
+	flt_ = {"address": address}
+	if customer:
+		flt_["customer"] = customer
+	r = frappe.db.get_value("MT Store", flt_, ["store_code", "store_name"], as_dict=True)
+	if not r:
+		return "", ""
+	return cstr(r.store_code), cstr(r.store_name)
+
+
+def he_so_quy_doi(item_code, uom, stock_uom):
+	"""Hệ số uom → ĐVT kho. None = mã hàng chưa khai quy đổi cho ĐVT đó."""
+	if not uom or uom == stock_uom:
+		return 1.0
+	cf = frappe.db.get_value(
+		"UOM Conversion Detail", {"parent": item_code, "parenttype": "Item", "uom": uom}, "conversion_factor"
+	)
+	return flt(cf) if flt(cf) > 0 else None
+
+
+class LoThuHoi(Document):
+	def before_validate(self):
+		self._chep_khach()
+		self._chep_diem()
+		self._chep_lai_xe()
+		self._quy_doi_hang()
+		self.so_dinh_kem = frappe.db.count(
+			"File", {"attached_to_doctype": self.doctype, "attached_to_name": self.name}
+		) if self.name and not self.is_new() else 0
+
+	def validate(self):
+		if self.trang_thai not in TRANG_THAI:
+			frappe.throw(_("Trạng thái vận chuyển không hợp lệ: {0}").format(self.trang_thai))
+		if not dia_chi_cua_khach(self.shipping_address_name, self.customer):
+			frappe.throw(
+				_(
+					"Địa chỉ {0} không phải địa chỉ của khách {1}. Chọn lại điểm lấy hàng trong "
+					"danh sách địa chỉ CỦA KHÁCH NÀY — hóa đơn trả về dựng trên đúng điểm đó."
+				).format(self.shipping_address_name, self.customer)
+			)
+		self._kiem_hang()
+		self._khoa_khi_ke_toan_da_kiem()
+
+	def on_trash(self):
+		if phieu_kiem([self.name]):
+			frappe.throw(
+				_(
+					"Lô {0} đã có phiếu kiểm hàng bên kế toán. Xóa lô là phiếu kiểm và hóa đơn "
+					"trả về mất gốc — nhờ kế toán xóa phiếu kiểm trước."
+				).format(self.name)
+			)
+
+	# ── chép phần hiển thị: SERVER làm, không tin client ─────────────────────
+	def _chep_khach(self):
+		if self.customer:
+			self.customer_name = frappe.db.get_value("Customer", self.customer, "customer_name") or self.customer
+
+	def _chep_diem(self):
+		a = None
+		if self.shipping_address_name:
+			a = frappe.db.get_value(
+				"Address",
+				self.shipping_address_name,
+				["address_title", "address_line1", "address_line2", "city", "county", "state", "phone"],
+				as_dict=True,
+			)
+		if not a:
+			self.ten_diem = self.dia_chi = self.sdt_diem = self.ma_diem = None
+			return
+		ma, ten_mt = ma_diem_mt(self.shipping_address_name, self.customer)
+		self.ten_diem = ten_mt or cstr(a.address_title) or self.shipping_address_name
+		self.ma_diem = ma or None
+		self.dia_chi = format_dia_chi(a)
+		self.sdt_diem = cstr(a.phone) or None
+
+	def _chep_lai_xe(self):
+		if not self.lai_xe:
+			self.ten_lai_xe = self.sdt_lai_xe = None
+			return
+		d = frappe.db.get_value("Driver", self.lai_xe, ["full_name", "cell_number"], as_dict=True) or {}
+		self.ten_lai_xe = d.get("full_name") or self.lai_xe
+		self.sdt_lai_xe = d.get("cell_number")
+
+	def _quy_doi_hang(self):
+		tong = 0.0
+		for r in self.items or []:
+			if not r.item_code:
+				continue
+			it = frappe.db.get_value("Item", r.item_code, ["item_name", "stock_uom"], as_dict=True)
+			if not it:
+				continue
+			r.item_name = it.item_name
+			r.stock_uom = it.stock_uom
+			r.uom = r.uom or it.stock_uom
+			cf = he_so_quy_doi(r.item_code, r.uom, it.stock_uom)
+			# Hệ số chưa khai thì để trống: `_kiem_hang` nói ra ở dòng nào. Tự lấy 1 là
+			# biến "3 thùng" thành "3 hộp" — số khai sai mười mấy lần mà không ai thấy.
+			r.conversion_factor = cf
+			r.stock_qty = flt(r.qty) * cf if cf else None
+			tong += flt(r.stock_qty)
+		self.tong_sl_khai = tong
+
+	def _kiem_hang(self):
+		thay = {}
+		for r in self.items or []:
+			if not r.item_code:
+				frappe.throw(_("Dòng {0}: chưa chọn mã hàng.").format(r.idx))
+			if flt(r.qty) <= 0:
+				frappe.throw(_("Dòng {0} ({1}): số lượng khai phải > 0.").format(r.idx, r.item_code))
+			if not r.conversion_factor:
+				frappe.throw(
+					_("Dòng {0}: mã {1} chưa khai quy đổi đơn vị {2} → {3} trên Item.").format(
+						r.idx, r.item_code, r.uom, r.stock_uom
+					)
+				)
+			# MỘT mã MỘT dòng. Hai dòng cùng mã thì phép so "khai vs kiểm" bên kế toán
+			# phải tự cộng lại — và chỗ phải tự cộng là chỗ cộng sót.
+			if r.item_code in thay:
+				frappe.throw(
+					_("Mã {0} xuất hiện ở dòng {1} và {2} — gộp vào một dòng.").format(
+						r.item_code, thay[r.item_code], r.idx
+					)
+				)
+			thay[r.item_code] = r.idx
+
+	def _khoa_khi_ke_toan_da_kiem(self):
+		if self.is_new():
+			return
+		before = self.get_doc_before_save()
+		if not before or not phieu_kiem([self.name]):
+			return
+		doi = [
+			lbl
+			for f, lbl in (("customer", _("khách hàng")), ("shipping_address_name", _("điểm lấy hàng")))
+			if cstr(before.get(f)) != cstr(self.get(f))
+		]
+		if doi:
+			frappe.throw(
+				_(
+					"Kế toán đã mở phiếu kiểm hàng cho lô {0} — không đổi {1} được nữa. Phiếu kiểm "
+					"và hóa đơn trả về đã dựng trên giá trị cũ."
+				).format(self.name, ", ".join(doi))
+			)
+		if before.trang_thai in TRANG_THAI and TRANG_THAI.index(self.trang_thai) < TRANG_THAI.index(
+			before.trang_thai
+		):
+			frappe.throw(
+				_("Kế toán đã kiểm hàng của lô {0} — không lùi chặng vận chuyển được nữa.").format(self.name)
+			)

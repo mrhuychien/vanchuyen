@@ -35,6 +35,23 @@ bench restart
 | `Điều Phối Vận Chuyển` | Tạo/submit/hoàn thành/hủy chuyến, xếp đơn — Desk + portal `/vc#/xep-chuyen` |
 | `Lái Xe` | Xem chuyến của mình, cập nhật trạng thái điểm giao, chụp chứng từ — portal `/vc#/chuyen` |
 
+## Thu hồi hàng — siêu thị xuất trả (`/vc#/thu-hoi`)
+
+Một **lô thu hồi** (`Lo Thu Hoi`, `TH-.YYYY.-.####`) = một lần siêu thị gọi trả hàng:
+khách + **điểm lấy hàng** (`shipping_address_name`, phải là Address của chính khách),
+ngày yêu cầu, số phiếu xuất trả của siêu thị, hàng siêu thị **khai**, giao xe, và
+**file đính kèm** (private — xem qua `thu_hoi.xem_dinh_kem` có guard).
+
+| Chặng | Ai bấm | Ở đâu |
+|---|---|---|
+| Tạo yêu cầu → Đã lấy hàng → Đã nhận hàng | điều hành / tổ trưởng; lái xe bấm "Đã lấy hàng" cho lô của mình | `#/thu-hoi`, `#/chuyen` |
+| Đang kiểm → Đã kiểm hàng → Đã nhập chứng từ → Xong | kế toán (app `ketoan`, phiếu `Kiem Hang Thu Hoi`) | portal `/ketoan#/thu-hoi` |
+
+App này **chỉ đọc mềm** phiếu kiểm bên ketoan để hiện chặng tổng; khi kế toán đã mở
+phiếu kiểm thì khách / điểm bị khóa, không lùi chặng hay xóa lô được nữa. Thiết kế
+đầy đủ: [`docs/thu-hoi/blueprint-thu-hoi.md`](docs/thu-hoi/blueprint-thu-hoi.md).
+Cài bản này cần `bench --site <site> migrate` (2 DocType mới).
+
 ## Verify trước khi ship
 
 ```bash
@@ -42,6 +59,7 @@ python3 -m py_compile vanchuyen/**/*.py
 for f in vanchuyen/public/vanchuyen/**/*.js; do node --check "$f"; done
 python3 .claude/skills/nextcode-build/references/validate_shipped_docs.py apps/vanchuyen/vanchuyen
 python3 docs/verified/lo_nguyen_check.py     # lô nguyên (0 kiện + hộp lẻ) — chạy KHÔNG cần bench
+python3 docs/verified/thu_hoi_check.py       # lô thu hồi: đúng điểm của khách, khóa khi kế toán đã kiểm
 ```
 
 `docs/verified/` là bộ kiểm chạy độc lập bằng bộ giả `frappe`: mỗi script mở đầu
