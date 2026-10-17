@@ -14,6 +14,9 @@ Build theo **kiểu NPP** (phương pháp nextcode + skills `frappe-*`). Brief �
   chuyến xe, lái xe, tên + SĐT lái xe, xe — vanchuyen tạo & sở hữu khi cài).
 - **Portal SPA** `/vc` (vanilla JS no-build, hash router, import map cache-bust) — cho Điều Phối & Lái Xe.
 - **Reconcile**: `frappe.db.set_value(update_modified=False)` stamp về Sales Invoice (không đụng timestamp kế toán).
+- **Quản lý xe** (`/vc#/quan-ly-xe`): xe tải / xe con, lịch đăng kiểm (6 tháng / 1 năm / 2 năm / ngày cụ thể),
+  lịch thay dầu (km và/hoặc tháng), nhật ký bảo dưỡng & sửa chữa (DocType `Nhat Ky Xe`). Chỉ **xe tải**
+  hiện ở Xếp chuyến. Thiết kế + nghiệm thu: [`docs/quan-ly-xe.md`](docs/quan-ly-xe.md).
 
 Quy tắc vàng của tách đơn: *phần còn lại KHÔNG phải là một record — nó là phép trừ.*
 Không bao giờ clone/tách Sales Invoice.
@@ -35,6 +38,9 @@ bench restart
 | `Điều Phối Vận Chuyển` | Tạo/submit/hoàn thành/hủy chuyến, xếp đơn — Desk + portal `/vc#/xep-chuyen` |
 | `Lái Xe` | Xem chuyến của mình, cập nhật trạng thái điểm giao, chụp chứng từ — portal `/vc#/chuyen` |
 
+Màn **Quản lý xe** mở cho tổ trưởng (Điều Phối), điều hành (có quyền ghi Sales Invoice) và quản trị viên;
+lái xe thường không vào được.
+
 ## Verify trước khi ship
 
 ```bash
@@ -42,6 +48,7 @@ python3 -m py_compile vanchuyen/**/*.py
 for f in vanchuyen/public/vanchuyen/**/*.js; do node --check "$f"; done
 python3 .claude/skills/nextcode-build/references/validate_shipped_docs.py apps/vanchuyen/vanchuyen
 python3 docs/verified/lo_nguyen_check.py     # lô nguyên (0 kiện + hộp lẻ) — chạy KHÔNG cần bench
+python3 docs/verified/quan_ly_xe_check.py    # lịch đăng kiểm/thay dầu + lọc xe tải ở Xếp chuyến
 ```
 
 `docs/verified/` là bộ kiểm chạy độc lập bằng bộ giả `frappe`: mỗi script mở đầu
