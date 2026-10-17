@@ -13,6 +13,9 @@ Build theo **kiểu NPP** (phương pháp nextcode + skills `frappe-*`). Brief �
   (3 field app tự đặt: xếp chuyến / thể tích khả dụng / tài khoản portal; 5 field STAMP vận chuyển:
   chuyến xe, lái xe, tên + SĐT lái xe, xe — vanchuyen tạo & sở hữu khi cài).
 - **Portal SPA** `/vc` (vanilla JS no-build, hash router, import map cache-bust) — cho Điều Phối & Lái Xe.
+  Menu ngang trên máy tính gom Xếp chuyến · Tài khoản · Chuyến của tôi · Quản lý xe · Trả cước vào
+  nhóm **Đội xe**: bấm để mở thành hàng thứ hai dưới header, bấm lại để thu; nhớ theo từng máy,
+  mặc định thu lại. Thanh dưới trên điện thoại giữ nguyên.
 - **Reconcile**: `frappe.db.set_value(update_modified=False)` stamp về Sales Invoice (không đụng timestamp kế toán).
 - **Quản lý xe** (`/vc#/quan-ly-xe`): xe tải / xe con, lịch đăng kiểm (6 tháng / 1 năm / 2 năm / ngày cụ thể),
   lịch thay dầu (km và/hoặc tháng), nhật ký bảo dưỡng & sửa chữa (DocType `Nhat Ky Xe`), xe ngừng sử dụng
@@ -72,6 +75,7 @@ python3 docs/verified/lo_nguyen_check.py     # lô nguyên (0 kiện + hộp l�
 python3 docs/verified/thu_hoi_check.py       # lô thu hồi: đúng điểm của khách, khóa khi kế toán đã kiểm
 python3 docs/verified/thu_hoi_ui_check.py    # màn thu hồi trong Chromium (cần pip install playwright)
 python3 docs/verified/quan_ly_xe_check.py    # lịch đăng kiểm/thay dầu + lọc xe tải còn dùng ở Xếp chuyến
+python3 docs/verified/nav_nhom_check.py      # menu ngang: nhóm Đội xe thu/mở, nhớ trạng thái (Chromium)
 ```
 
 `docs/verified/` là bộ kiểm chạy độc lập bằng bộ giả `frappe`: mỗi script mở đầu

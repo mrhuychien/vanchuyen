@@ -27,7 +27,9 @@
 	--vc-radius-lg: 20px;
 	--vc-radius-xl: 28px;
 
-	--vc-header-h: 56px;
+	--vc-header-row: 56px;
+	--vc-header-h: var(--vc-header-row);
+	--vc-subnav-h: 48px; /* hàng mục con khi mở nhóm "Đội xe" (máy tính) */
 	--vc-bottom-h: 64px;
 
 	/* Accent logistics (single theme): xanh dương → teal */
@@ -79,11 +81,15 @@
 	top: 0;
 	height: var(--vc-header-h);
 	border-bottom: 1px solid var(--vc-border);
+	display: flex;
+	flex-direction: column;
 }
 .vc-header-inner {
+	width: 100%;
 	max-width: 1200px;
 	margin: 0 auto;
-	height: 100%;
+	flex: 1;
+	min-height: 0;
 	padding: 0 0.75rem;
 	display: flex;
 	align-items: center;
@@ -102,6 +108,11 @@
 	display: flex;
 	align-items: center;
 	gap: 0.4rem;
+	min-width: 0;
+}
+/* Nút làm mới / tài khoản không bao giờ bị menu dài bóp mất hay đẩy ra ngoài màn hình. */
+.vc-header-actions > .vc-icon-btn {
+	flex-shrink: 0;
 }
 .vc-main {
 	position: relative;
@@ -137,15 +148,25 @@
 	transform: scale(0.95);
 }
 
-.vc-desktop-nav {
+.vc-desktop-nav,
+.vc-subnav {
 	display: none;
 }
 @media (min-width: 768px) {
+	/* Cửa sổ hẹp mà menu vẫn dài hơn thanh: CUỘN NGANG trong thanh — viên thuốc không bẻ chữ
+	   thành 2 dòng tràn khỏi header 56px, nút làm mới / tài khoản không bị đẩy ra ngoài. */
 	.vc-desktop-nav {
 		display: flex;
 		gap: 6px;
+		min-width: 0;
+		overflow-x: auto;
+		scrollbar-width: none;
 	}
-	.vc-desktop-nav a {
+	.vc-desktop-nav::-webkit-scrollbar {
+		display: none;
+	}
+	.vc-desktop-nav a,
+	.vc-subnav a {
 		padding: 7px 14px;
 		border-radius: 999px;
 		text-decoration: none;
@@ -154,11 +175,75 @@
 		color: var(--vc-text-2);
 		background: var(--vc-surface);
 		border: 1px solid var(--vc-border);
+		white-space: nowrap;
+		flex-shrink: 0;
 	}
-	.vc-desktop-nav a.vc-active {
+	.vc-desktop-nav a.vc-active,
+	.vc-subnav a.vc-active {
 		background: var(--vc-accent-grad);
 		color: #fff;
 		border-color: transparent;
+	}
+	/* Nhóm "Đội xe": nút nhóm cùng dáng viên thuốc; mở ra thì mục con thành HÀNG THỨ HAI của
+	   header (header cao thêm --vc-subnav-h). Đang ở màn con mà nhóm thu → nút nhóm sáng. */
+	.vc-nav-group-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 7px 14px;
+		border-radius: 999px;
+		font-family: inherit;
+		font-weight: 700;
+		font-size: 0.85rem;
+		line-height: inherit;
+		color: var(--vc-text-2);
+		background: var(--vc-surface);
+		border: 1px solid var(--vc-border);
+		cursor: pointer;
+		white-space: nowrap;
+		flex-shrink: 0;
+	}
+	.vc-nav-group-btn[aria-expanded="true"] {
+		background: var(--vc-surface-2);
+	}
+	.vc-nav-group-btn.vc-has-active[aria-expanded="false"] {
+		background: var(--vc-accent-grad);
+		color: #fff;
+		border-color: transparent;
+	}
+	.vc-nav-caret {
+		font-size: 0.7em;
+		transition: transform 0.15s;
+	}
+	.vc-nav-group-btn[aria-expanded="true"] .vc-nav-caret {
+		transform: rotate(180deg);
+	}
+	html.vc-nhom-mo {
+		--vc-header-h: calc(var(--vc-header-row) + var(--vc-subnav-h));
+	}
+	.vc-nhom-mo .vc-subnav {
+		display: block;
+		flex: 0 0 var(--vc-subnav-h);
+		border-top: 1px solid var(--vc-border);
+	}
+	.vc-subnav-row {
+		max-width: 1200px;
+		height: 100%;
+		margin: 0 auto;
+		padding: 0 0.75rem;
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+	/* Dồn phải bằng margin auto (không dùng justify-content: flex-end: tràn thì phần đầu bị đẩy
+	   ra mép trái, không cuộn tới được). */
+	.vc-subnav-row > :first-child {
+		margin-left: auto;
+	}
+	.vc-subnav-row[hidden] {
+		display: none;
 	}
 	.vc-bottom-nav {
 		display: none !important;
