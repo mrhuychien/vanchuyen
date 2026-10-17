@@ -6,10 +6,11 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import cint, flt
+from frappe.utils import cint, flt, nowdate
 
 from vanchuyen.api.guards import require_dieu_phoi
 from vanchuyen.van_chuyen.doctype.chuyen_xe.chuyen_xe import _format_dia_chi, da_xep, da_giu_nguyen_lo
+from vanchuyen.van_chuyen.doctype.nhat_ky_xe import nhat_ky_xe as nk
 
 
 @frappe.whitelist()
@@ -126,13 +127,34 @@ def get_drivers():
 
 @frappe.whitelist()
 def get_vehicles():
-	"""Danh sách xe kèm thể tích khả dụng."""
+	"""Xe cho builder: CHỈ XE TẢI (xe con không chở hàng — ẩn cho đỡ rối), kèm thể
+	tích khả dụng + cảnh báo gấp (đăng kiểm quá hạn / sắp hết, quá hạn thay dầu).
+
+	Lọc loại xe ở PYTHON, không ở SQL: `custom_loai_xe != 'Xe con'` trong SQL loại
+	luôn dòng NULL (so với NULL ra NULL) — đúng những xe CŨ có trước trường này sẽ
+	biến mất khỏi màn dùng hằng ngày. `nhat_ky_xe.loai_xe` coi trống = xe tải."""
 	require_dieu_phoi()
-	return frappe.get_all(
-		"Vehicle",
-		fields=["name", "make", "model", "custom_the_tich_kha_dung"],
-		order_by="name asc",
-	)
+	fields = ["name", "make", "model", "custom_the_tich_kha_dung"]
+	if not frappe.get_meta("Vehicle").has_field("custom_loai_xe"):
+		# Code mới chạy trước `bench migrate`: giữ hành vi cũ, không làm sập Xếp chuyến.
+		return frappe.get_all("Vehicle", fields=fields, order_by="name asc")
+
+	rows = frappe.get_all("Vehicle", fields=fields + ["custom_loai_xe", *nk.TRUONG_LICH], order_by="name asc")
+	hom_nay = nk._d(nowdate())
+	out = []
+	for r in rows:
+		if nk.loai_xe(r.custom_loai_xe) == nk.XE_CON:
+			continue
+		out.append(
+			{
+				"name": r.name,
+				"make": r.make,
+				"model": r.model,
+				"custom_the_tich_kha_dung": flt(r.custom_the_tich_kha_dung),
+				"canh_bao": nk.canh_bao_xep_chuyen(nk.lich_cua_xe(r, hom_nay)),
+			}
+		)
+	return out
 
 
 @frappe.whitelist()
