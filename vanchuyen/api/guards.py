@@ -39,6 +39,20 @@ def require_dieu_phoi():
 		frappe.throw(_("Chỉ Điều Phối Vận Chuyển được phép thao tác này."), frappe.PermissionError)
 
 
+def can_quan_ly_xe(user=None):
+	"""Quản lý xe = tổ trưởng (role Điều Phối / cờ Driver), điều hành (có quyền ghi
+	Sales Invoice — cùng cổng với các view điều hành) hoặc quản trị viên.
+	Lái xe thường KHÔNG vào được."""
+	user = user or frappe.session.user
+	return is_to_truong(user) or is_admin(user) or bool(frappe.has_permission("Sales Invoice", "write", user=user))
+
+
+def require_quan_ly_xe():
+	"""Throw PermissionError nếu không được quản lý xe (xem can_quan_ly_xe)."""
+	if not can_quan_ly_xe():
+		frappe.throw(_("Bạn không có quyền quản lý xe."), frappe.PermissionError)
+
+
 def require_driver():
 	"""Trả về Driver.name có custom_user == session user; throw nếu không map được."""
 	driver = frappe.db.get_value("Driver", {"custom_user": frappe.session.user}, "name")

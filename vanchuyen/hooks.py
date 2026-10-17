@@ -8,6 +8,14 @@ app_license = "mit"
 # Sau khi cài: cấp DocPerm (KHÔNG ship qua fixtures — xem install.py)
 after_install = "vanchuyen.install.after_install"
 
+# Lịch đăng kiểm trên Vehicle: chu kỳ 6 tháng / 1 năm / 2 năm → hạn tự tính lại MỖI lần lưu
+# (kể cả sửa tay trên Desk). Hook không throw — nó chạy cho mọi lần lưu Vehicle của mọi app.
+doc_events = {
+    "Vehicle": {
+        "validate": "vanchuyen.van_chuyen.doctype.nhat_ky_xe.nhat_ky_xe.vehicle_validate",
+    },
+}
+
 # ---------------------------------------------------------------------------
 # Fixtures — CHỈ ship đúng thứ app này sở hữu, lọc theo NAME (không quét cả DocType).
 #   - 3 Custom Field app tự đặt (fieldname ASCII): custom_trang_thai_xep / _the_tich_kha_dung / _user.
@@ -42,6 +50,18 @@ fixtures = [
                     "Vehicle-custom_phu_phi_xe",
                     "Sales Invoice-custom_co_su_co",
                     "Sales Invoice-custom_su_co_tom_tat",
+                    # Quản lý xe (#/quan-ly-xe): loại xe + lịch đăng kiểm / thay dầu trên Vehicle.
+                    "Vehicle-custom_loai_xe",
+                    "Vehicle-custom_ngay_cap_nhat_km",
+                    "Vehicle-custom_sec_lich_xe",
+                    "Vehicle-custom_chu_ky_dang_kiem",
+                    "Vehicle-custom_ngay_dang_kiem",
+                    "Vehicle-custom_han_dang_kiem",
+                    "Vehicle-custom_col_lich_xe",
+                    "Vehicle-custom_thay_dau_moi_km",
+                    "Vehicle-custom_thay_dau_moi_thang",
+                    "Vehicle-custom_ngay_thay_dau",
+                    "Vehicle-custom_km_thay_dau",
                 ],
             ]
         ],
