@@ -1,6 +1,6 @@
-// #/thu-hoi — THU HỒI HÀNG (điều hành + tổ trưởng). Siêu thị xuất trả → xe vào lấy →
-// nhận về kho; từ đó kế toán tiếp nối (kiểm hàng → nhập chứng từ → xong) và CHẶNG TỔNG
-// hiện luôn ở đây, đọc từ phiếu kiểm bên app kế toán.
+// #/thu-hoi — THU HỒI HÀNG (điều hành + tổ trưởng). Siêu thị xuất trả → đơn vị vận chuyển
+// (Viettel Post / Nhất Tín) vào lấy → nhận về kho; từ đó kế toán tiếp nối (kiểm hàng →
+// nhập chứng từ → xong) và CHẶNG TỔNG hiện luôn ở đây, đọc từ phiếu kiểm bên app kế toán.
 import { call, errText } from "../lib/api.js";
 import { skeleton } from "../lib/dom.js";
 import { escapeHtml, formatDate, formatQty } from "../lib/format.js";
@@ -15,14 +15,14 @@ export async function render({ container, query }) {
 		<div class="vc-view-banner">
 			<div>
 				<div class="vc-view-banner-title">Thu hồi hàng</div>
-				<div class="vc-view-banner-subtitle">Siêu thị xuất trả → xe vào lấy → nhận về kho → kế toán kiểm &amp; lập hóa đơn trả về</div>
+				<div class="vc-view-banner-subtitle">Siêu thị xuất trả → đơn vị vận chuyển vào lấy → nhận về kho → kế toán kiểm &amp; lập hóa đơn trả về</div>
 			</div>
 			<div class="vc-view-banner-badge"><i class="fas fa-rotate-left"></i></div>
 		</div>
 		<a class="vc-btn-primary vc-btn-block vc-mb-3" href="#/thu-hoi/new"><i class="fas fa-plus"></i> Tạo yêu cầu xuất trả</a>
 		<div class="vc-filters vc-mb-2">
 			<input class="vc-input" id="th-search" type="search" autocomplete="off"
-				placeholder="🔍 Tìm khách / điểm / số phiếu siêu thị / lái xe..." value="${escapeHtml(S.tim)}" />
+				placeholder="🔍 Khách / điểm / phiếu / mã vận đơn..." value="${escapeHtml(S.tim)}" />
 		</div>
 		<div id="th-pills" class="vc-pill-nav"></div>
 		<div id="th-list">${skeleton(110, 3)}</div>`;
@@ -109,11 +109,12 @@ function drawList(container) {
 
 function card(r) {
 	const ds = S.data.chang_list || CHANG_FALLBACK;
-	const giao = [r.ten_lai_xe ? "🚚 " + escapeHtml(r.ten_lai_xe) : "🚚 chưa giao xe", r.xe ? escapeHtml(r.xe) : "",
-		r.ngay_hen_lay ? "hẹn " + escapeHtml(formatDate(r.ngay_hen_lay)) : ""].filter(Boolean).join(" · ");
+	const giao = [r.don_vi_thu_hoi ? "🚚 " + escapeHtml(r.don_vi_thu_hoi) : "🚚 chưa chọn đơn vị thu hồi",
+		r.ma_van_don ? "VĐ " + escapeHtml(r.ma_van_don) : "",
+		r.ngay_hen_lay ? "thu " + escapeHtml(formatDate(r.ngay_hen_lay)) : ""].filter(Boolean).join(" · ");
 	const kien = r.so_kien_nhan
 		? `📦 nhận ${formatQty(r.so_kien_nhan)}${r.so_kien_du_kien ? "/" + formatQty(r.so_kien_du_kien) : ""} kiện`
-		: r.so_kien_du_kien ? `📦 dự kiến ${formatQty(r.so_kien_du_kien)} kiện` : "";
+		: r.so_kien_du_kien ? `📦 ${formatQty(r.so_kien_du_kien)} kiện (vận đơn)` : "";
 	// Nút tiến chặng nhanh chỉ cho ba chặng của vận chuyển; từ "Đã nhận hàng" là việc
 	// của kế toán, ở đây chỉ xem.
 	let tien = "";
@@ -137,7 +138,6 @@ function card(r) {
 		<div class="vc-text-sm vc-text-muted vc-mt-1">${giao}</div>
 		<div class="vc-order-meta">
 			${kien ? `<span class="vc-chip">${kien}</span>` : ""}
-			${Number(r.tong_sl_khai) > 0 ? `<span class="vc-chip">khai ${formatQty(r.tong_sl_khai)} (ĐVT kho)</span>` : ""}
 			<span class="vc-chip">📎 ${Number(r.so_dinh_kem) || 0} file</span>
 		</div>
 		<div class="vc-flex vc-gap-2 vc-mt-2" style="flex-wrap:wrap">

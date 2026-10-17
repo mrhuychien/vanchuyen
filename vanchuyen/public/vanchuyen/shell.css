@@ -1643,31 +1643,34 @@
 	max-height: 320px;
 	overflow-y: auto;
 }
-.vc-th-rows {
+/* Điểm đã chọn: thẻ gọn + nút "Đổi điểm" cùng hàng — danh sách điểm đã thu lại. */
+.vc-th-diem-chon {
 	display: flex;
-	flex-direction: column;
-	margin-top: 0.5rem;
-}
-.vc-th-row {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) 5.5rem 6.5rem 40px;
-	gap: 0.4rem;
 	align-items: center;
-	padding: 0.45rem 0;
-	border-bottom: 1px solid var(--vc-border);
+	gap: 0.6rem;
+	cursor: default;
 }
-.vc-th-row:last-child {
-	border-bottom: 0;
-}
-.vc-th-row-name {
+.vc-th-diem-info {
+	flex: 1;
 	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
 }
-.vc-th-qty,
-.vc-th-uom {
-	padding-left: 0.5rem;
-	padding-right: 0.5rem;
+/* Ô dán chi tiết hàng từ mail: bảng trong mail dán ra là các cột cách nhau bằng tab —
+   chữ đều cho cột còn thẳng. Điện thoại: 16px để iOS không phóng to khi gõ, tab 4 cho đỡ
+   gãy dòng trên màn 390px; máy tính: chữ nhỏ lại, tab 8 cho cột thẳng hơn. */
+.vc-th-paste {
+	min-height: 160px;
+	resize: vertical;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+	font-size: 16px;
+	line-height: 1.45;
+	tab-size: 4;
+	white-space: pre-wrap;
+}
+@media (min-width: 768px) {
+	.vc-th-paste {
+		font-size: 13px;
+		tab-size: 8;
+	}
 }
 .vc-th-files {
 	display: grid;
@@ -1730,25 +1733,10 @@
 		bottom: 8px;
 	}
 }
-.vc-th-qty,
-.vc-th-uom,
-.vc-th-diem-list input {
-	font-size: 16px; /* dưới 16px iOS tự phóng to khi gõ và không thu lại */
-}
 /* Link mang class nút (Chi tiết, Tạo yêu cầu…) không gạch chân như link chữ. */
 a.vc-btn-primary,
 a.vc-btn-ghost,
 a.vc-btn-success,
 a.vc-btn-danger {
 	text-decoration: none;
-}
-/* Màn hẹp: tên hàng chiếm trọn hàng trên, số lượng + ĐVT + xóa xuống hàng dưới —
-   bốn cột trên 390px bóp tên hàng thành 4 dòng và cắt chữ trong ô ĐVT. */
-@media (max-width: 479px) {
-	.vc-th-row {
-		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 40px;
-	}
-	.vc-th-row-name {
-		grid-column: 1 / -1;
-	}
 }

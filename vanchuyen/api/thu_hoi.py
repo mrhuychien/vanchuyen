@@ -1,42 +1,40 @@
-"""API THU HỒI HÀNG — portal /vc: #/thu-hoi (điều hành + tổ trưởng) và khối "Lấy hàng
-thu hồi" của lái xe trong #/chuyen.
+"""API THU HỒI HÀNG — portal /vc#/thu-hoi (điều hành + tổ trưởng).
 
-Một LÔ THU HỒI (`Lo Thu Hoi`) = một lần siêu thị gọi trả hàng. App này giữ ba chặng
-đầu (Tạo yêu cầu → Đã lấy hàng → Đã nhận hàng); kế toán tiếp nối bằng phiếu kiểm hàng
-bên ketoan, và mọi danh sách ở đây hiện TRẠNG THÁI TỔNG bằng cách đọc mềm phiếu đó.
+Một LÔ THU HỒI (`Lo Thu Hoi`) = một lần siêu thị gọi trả hàng. Hàng do ĐƠN VỊ VẬN CHUYỂN
+NGOÀI vào lấy (Viettel Post / Nhất Tín) — lô giữ đơn vị, mã vận đơn, ngày thu, số kiện; chi
+tiết hàng là bản dán nguyên văn từ mail siêu thị. App này giữ ba chặng đầu (Tạo yêu cầu →
+Đã lấy hàng → Đã nhận hàng); kế toán tiếp nối bằng phiếu kiểm hàng bên ketoan (mã + số
+lượng chính xác ở đó), và mọi danh sách ở đây hiện TRẠNG THÁI TỔNG bằng cách đọc mềm phiếu.
 
-Quyền: DocType chỉ cấp System Manager (như `Su Co Van Chuyen`). Mọi thao tác đi qua
-method có guard ở dòng đầu, rồi mới `ignore_permissions` trên ĐÚNG bản ghi:
-  · `_require()`          — điều hành (quyền ghi Sales Invoice), tổ trưởng, quản trị;
-  · `_require_lo_cua_toi` — lái xe, CHỈ lô được giao cho chính mình.
+Quyền: DocType chỉ cấp System Manager (như `Su Co Van Chuyen`). Mọi method gọi `_require()`
+ở dòng đầu — điều hành (quyền ghi Sales Invoice), tổ trưởng, quản trị — rồi mới
+`ignore_permissions` trên ĐÚNG bản ghi.
 
 File đính kèm lưu PRIVATE. Không ai ngoài System Manager có quyền DocType `Lo Thu Hoi`,
 nên file private không mở thẳng bằng /private/files được — xem qua `xem_dinh_kem`, nơi
 guard thay cho DocPerm. Public thì ai có đường link cũng mở được phiếu xuất trả có giá.
+Nhận ảnh / PDF / Excel / Word / mail…, KHÔNG nhận loại chạy được script (xem `DUOI_DINH_KEM`).
 """
 
 import json
+import os
 from urllib.parse import quote
 
 import frappe
 from frappe import _
 from frappe.utils import cint, cstr, date_diff, flt, getdate, now_datetime, nowdate
 
-from vanchuyen.api.guards import is_admin, is_to_truong, require_driver
+from vanchuyen.api.guards import is_admin, is_to_truong
 from vanchuyen.api.nhap_don import _ten_key
 from vanchuyen.van_chuyen.doctype.lo_thu_hoi.lo_thu_hoi import (
 	CHANG,
-	DA_LAY,
-	DA_NHAN,
 	DANG_KIEM,
 	KIEM_DT,
 	TAO,
 	TRANG_THAI,
 	format_dia_chi,
-	he_so_quy_doi,
 	phieu_kiem,
 )
-from vanchuyen.van_chuyen.doctype.nhat_ky_xe import nhat_ky_xe as nk
 
 DT = "Lo Thu Hoi"
 XONG = CHANG[-1]
@@ -45,8 +43,8 @@ XONG = CHANG[-1]
 # không có trong tuple thì `save_lo` BỎ QUA IM LẶNG — người dùng gõ, bấm lưu, mất.
 _UPDATABLE = (
 	"ngay_yeu_cau", "so_phieu_sieu_thi", "ly_do", "customer", "shipping_address_name",
-	"nguoi_lien_he", "sdt_lien_he", "ghi_chu",
-	"ngay_hen_lay", "lai_xe", "xe", "chuyen_xe",
+	"nguoi_lien_he", "sdt_lien_he", "ghi_chu", "chi_tiet_hang",
+	"don_vi_thu_hoi", "ma_van_don", "ngay_hen_lay",
 	"so_kien_du_kien", "so_kien_nhan", "gia_tri_khai",
 )
 _SO = ("so_kien_du_kien", "so_kien_nhan", "gia_tri_khai")
@@ -55,10 +53,35 @@ _SO = ("so_kien_du_kien", "so_kien_nhan", "gia_tri_khai")
 _LIST_COLS = (
 	"name", "trang_thai", "ngay_yeu_cau", "so_phieu_sieu_thi", "ly_do",
 	"customer", "customer_name", "shipping_address_name", "ten_diem", "ma_diem", "dia_chi",
-	"ngay_hen_lay", "lai_xe", "ten_lai_xe", "xe", "lay_luc", "nhan_luc",
-	"so_kien_du_kien", "so_kien_nhan", "so_dinh_kem", "tong_sl_khai",
+	"don_vi_thu_hoi", "ma_van_don", "ngay_hen_lay", "lay_luc", "nhan_luc",
+	"so_kien_du_kien", "so_kien_nhan", "so_dinh_kem",
 )
 _DATE_COLS = ("ngay_yeu_cau", "ngay_hen_lay", "lay_luc", "nhan_luc")
+
+# Đính kèm: ảnh, PDF, bảng tính, văn bản, mail, file nén. KHÔNG nhận loại trình duyệt chạy
+# được script (html / svg / xml / js…) — proxy `xem_dinh_kem` phục vụ file trên CHÍNH tên miền
+# của site, một .html có script là chạy với phiên đăng nhập của người bấm xem.
+DUOI_DINH_KEM = frozenset((
+	"jpg", "jpeg", "png", "webp", "gif", "heic", "heif", "pdf",
+	"xls", "xlsx", "xlsm", "csv", "ods", "doc", "docx", "odt", "rtf", "txt",
+	"eml", "msg", "zip", "rar", "7z",
+))
+# Mở thẳng trong tab (ảnh hiện trong <img>, PDF xem được); còn lại TẢI VỀ — Excel / Word
+# trình duyệt không hiển thị được, và tải về là chắc chắn không bị diễn giải thành trang.
+DUOI_XEM_TRONG_TAB = frozenset(("jpg", "jpeg", "png", "webp", "gif", "pdf"))
+
+
+def _duoi(ten):
+	"""Phần mở rộng, chữ thường, không dấu chấm: "Phieu.XLSX" → "xlsx"."""
+	return os.path.splitext(cstr(ten))[1].lstrip(".").lower()
+
+
+def _van_ban_dan(v):
+	"""Chữ dán từ mail: giữ NGUYÊN tab / xuống dòng / khoảng trắng đầu dòng — bảng hàng trong
+	mail dán ra là các cột cách nhau bằng tab, cắt đi là lệch cột. Chỉ đổi CRLF → LF và bỏ
+	dòng trống thừa ở hai đầu."""
+	t = cstr(v).replace("\r\n", "\n").replace("\r", "\n").strip("\n").rstrip()
+	return t or None
 
 
 def _require():
@@ -66,15 +89,6 @@ def _require():
 	if is_admin() or is_to_truong() or frappe.has_permission("Sales Invoice", "write"):
 		return
 	frappe.throw(_("Bạn không có quyền điều phối thu hồi hàng."), frappe.PermissionError)
-
-
-def _require_lo_cua_toi(name):
-	"""Lái xe chỉ đụng được lô GIAO CHO CHÍNH MÌNH. Trả Driver.name."""
-	driver = require_driver()
-	lai_xe = frappe.db.get_value(DT, name, "lai_xe")
-	if not lai_xe or lai_xe != driver:
-		frappe.throw(_("Lô thu hồi này không giao cho bạn."), frappe.PermissionError)
-	return driver
 
 
 def _str_dates(d):
@@ -104,7 +118,7 @@ def _join_kiem():
 
 @frappe.whitelist()
 def list_lo(chang=None, tim=None, tu_ngay=None, den_ngay=None, page=1, page_size=30):
-	"""Danh sách lô, lọc theo CHẶNG TỔNG (7 chặng) + tìm khách/điểm/số phiếu/lái xe.
+	"""Danh sách lô, lọc theo CHẶNG TỔNG (7 chặng) + tìm khách/điểm/số phiếu/vận đơn.
 
 	`chang` = một trong 7 chặng · "dang_mo" (mặc định: chưa Xong) · "tat_ca".
 	Lọc ở SERVER, đếm pill trên CÙNG bộ tìm/ngày — bài học của `su_co.list_issues`: lọc
@@ -123,7 +137,8 @@ def list_lo(chang=None, tim=None, tu_ngay=None, den_ngay=None, page=1, page_size
 		p["q"] = "%" + cstr(tim).strip() + "%"
 		conds.append(
 			"(l.name LIKE %(q)s OR l.customer_name LIKE %(q)s OR l.ten_diem LIKE %(q)s "
-			"OR l.ma_diem LIKE %(q)s OR l.so_phieu_sieu_thi LIKE %(q)s OR l.ten_lai_xe LIKE %(q)s)"
+			"OR l.ma_diem LIKE %(q)s OR l.so_phieu_sieu_thi LIKE %(q)s OR l.ma_van_don LIKE %(q)s "
+			"OR l.don_vi_thu_hoi LIKE %(q)s)"
 		)
 	if tu_ngay:
 		p["tu"] = getdate(tu_ngay)
@@ -191,30 +206,17 @@ def _files(name):
 	)
 	for f in rows:
 		f["url"] = "/api/method/vanchuyen.api.thu_hoi.xem_dinh_kem?file=" + quote(f.name)
-		ext = cstr(f.file_name).rsplit(".", 1)[-1].lower() if "." in cstr(f.file_name) else ""
-		f["is_image"] = ext in ("jpg", "jpeg", "png", "webp", "gif", "heic")
+		f["ext"] = _duoi(f.file_name)
+		f["is_image"] = f["ext"] in ("jpg", "jpeg", "png", "webp", "gif")
 		f["creation"] = str(f.creation)
 	return rows
 
 
 def _lo_dict(name):
 	doc = frappe.get_doc(DT, name)
-	d = {f: doc.get(f) for f in _LIST_COLS + _UPDATABLE + ("customer_name", "sdt_diem", "ten_lai_xe",
-		"sdt_lai_xe", "lay_boi", "nhan_boi", "tong_sl_khai")}
+	d = {f: doc.get(f) for f in _LIST_COLS + _UPDATABLE + ("customer_name", "sdt_diem", "lay_boi", "nhan_boi")}
 	d["name"] = doc.name
 	_str_dates(d)
-	# Kèm ĐVT đã khai của từng mã: sửa ĐVT một dòng cũ thì ô chọn phải có sẵn lựa chọn,
-	# không bắt người dùng xóa dòng đi thêm lại.
-	uoms = _uoms([r.item_code for r in doc.items or [] if r.item_code])
-	d["items"] = [
-		{
-			"name": r.name, "item_code": r.item_code, "item_name": r.item_name, "uom": r.uom,
-			"qty": flt(r.qty), "stock_qty": flt(r.stock_qty), "stock_uom": r.stock_uom,
-			"conversion_factor": flt(r.conversion_factor), "ghi_chu": r.ghi_chu,
-			"uoms": uoms.get(r.item_code) or [{"uom": r.stock_uom, "he_so": 1}],
-		}
-		for r in doc.items or []
-	]
 	d["files"] = _files(doc.name)
 	kt = phieu_kiem([doc.name]).get(doc.name)
 	d["chang"] = kt or doc.trang_thai
@@ -227,7 +229,7 @@ def _lo_dict(name):
 
 @frappe.whitelist()
 def get_lo(name):
-	"""Chi tiết một lô: hàng khai, file đính kèm, chặng tổng (kèm chặng kế toán nếu có)."""
+	"""Chi tiết một lô: điều phối thu hồi, chi tiết hàng dán từ mail, file đính kèm, chặng tổng."""
 	_require()
 	if not frappe.db.exists(DT, name):
 		frappe.throw(_("Không tìm thấy lô thu hồi {0}.").format(name))
@@ -236,42 +238,20 @@ def get_lo(name):
 
 @frappe.whitelist()
 def get_lua_chon():
-	"""Dữ liệu cho ô chọn: lái xe, xe, chuyến đang mở, lý do trả."""
+	"""Dữ liệu cho ô chọn: lý do trả, đơn vị thu hồi (đọc từ meta — sửa Select trên Desk là
+	màn hình theo), hôm nay."""
 	_require()
-	driver_filters = {}
-	if frappe.get_meta("Driver").has_field("status"):
-		driver_filters["status"] = ["!=", "Left"]
-	ly_do = [o for o in cstr(frappe.get_meta(DT).get_field("ly_do").options).split("\n") if o]
-	# Xe: cùng khái niệm "được xếp chuyến" của Xếp chuyến (`nhat_ky_xe.xep_chuyen_duoc` —
-	# xe tải còn sử dụng). Lọc cho đỡ rối, không phải luật chặn: xe đang gắn trên lô vẫn
-	# hiện ở ô chọn (client giữ giá trị). Chỉ xin field meta đang có — chạy trước migrate
-	# thì thiếu field = xe tải còn dùng, hành vi cũ.
-	meta_xe = frappe.get_meta("Vehicle")
-	f_xe = ["name", "make", "model"] + [f for f in ("custom_loai_xe", "custom_ngung_su_dung") if meta_xe.has_field(f)]
-	vehicles = [
-		{"name": v.name, "make": v.make, "model": v.model}
-		for v in frappe.get_all("Vehicle", fields=f_xe, order_by="name asc", limit_page_length=0)
-		if nk.xep_chuyen_duoc(v)
-	]
-	return {
-		"drivers": frappe.get_all(
-			"Driver", filters=driver_filters, fields=["name", "full_name", "cell_number"],
-			order_by="full_name asc", limit_page_length=0,
-		),
-		"vehicles": vehicles,
-		"trips": frappe.get_all(
-			"Chuyen Xe",
-			filters={"docstatus": ["<", 2], "trang_thai": ["!=", "Hoàn thành"]},
-			fields=["name", "ngay_giao", "ten_lai_xe", "xe"],
-			order_by="ngay_giao desc", limit_page_length=50,
-		),
-		"ly_do": ly_do,
-		"today": nowdate(),
-	}
+	meta = frappe.get_meta(DT)
+
+	def tuy_chon(f):
+		df = meta.get_field(f)
+		return [o for o in cstr(df.options if df else "").split("\n") if o]
+
+	return {"ly_do": tuy_chon("ly_do"), "don_vi": tuy_chon("don_vi_thu_hoi"), "today": nowdate()}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# CHỌN KHÁCH · ĐIỂM · MÃ HÀNG
+# CHỌN KHÁCH · ĐIỂM
 # ═══════════════════════════════════════════════════════════════════════════
 
 @frappe.whitelist()
@@ -338,48 +318,6 @@ def get_dia_chi(customer, tim=None):
 	return out[:100]
 
 
-def _uoms(codes):
-	"""{item_code: [{uom, he_so}]} — mọi ĐVT đã khai quy đổi, lớn trước."""
-	if not codes:
-		return {}
-	out = {}
-	for r in frappe.get_all(
-		"UOM Conversion Detail",
-		filters={"parent": ["in", list(codes)], "parenttype": "Item"},
-		fields=["parent", "uom", "conversion_factor"], limit_page_length=0,
-	):
-		out.setdefault(r.parent, []).append({"uom": r.uom, "he_so": flt(r.conversion_factor)})
-	for v in out.values():
-		v.sort(key=lambda x: -x["he_so"])
-	return out
-
-
-@frappe.whitelist()
-def search_items(tim=None):
-	"""Tìm mã hàng theo mã / tên / mã vạch (khớp đúng) — cho bảng hàng siêu thị khai."""
-	_require()
-	q = cstr(tim).strip()
-	if not q:
-		return []
-	codes = frappe.get_all("Item Barcode", filters={"barcode": q}, pluck="parent", limit_page_length=5)
-	rows = frappe.get_all(
-		"Item",
-		filters={"disabled": 0, "is_sales_item": 1},
-		or_filters=[["name", "like", f"%{q}%"], ["item_name", "like", f"%{q}%"]],
-		fields=["name", "item_name", "stock_uom"],
-		order_by="item_name asc", limit_page_length=20,
-	)
-	seen = {r.name for r in rows}
-	extra = [c for c in codes if c not in seen]
-	if extra:
-		rows = frappe.get_all("Item", filters={"name": ["in", extra]},
-			fields=["name", "item_name", "stock_uom"]) + rows
-	uoms = _uoms([r.name for r in rows])
-	for r in rows:
-		r["uoms"] = uoms.get(r.name) or [{"uom": r.stock_uom, "he_so": 1}]
-	return rows
-
-
 # ═══════════════════════════════════════════════════════════════════════════
 # GHI
 # ═══════════════════════════════════════════════════════════════════════════
@@ -416,10 +354,10 @@ def _dat_chang(doc, moi, so_kien_nhan=None):
 
 @frappe.whitelist()
 def save_lo(payload, name=None):
-	"""Tạo / sửa lô. `payload.items` có mặt thì THAY toàn bộ bảng hàng khai.
+	"""Tạo / sửa lô. Chỉ field trong `_UPDATABLE`; tên khách / điểm / địa chỉ do controller
+	chép lại từ Customer + Address — không tin client.
 
-	Dòng hàng chỉ nhận item_code · uom · qty · ghi_chu; tên hàng, ĐVT kho, quy đổi do
-	controller tính lại — không tin client.
+	`chi_tiet_hang` (dán từ mail) đi qua `_van_ban_dan` — không `.strip()` như ô thường.
 	"""
 	_require()
 	if isinstance(payload, str):
@@ -437,19 +375,10 @@ def save_lo(payload, name=None):
 		v = payload.get(f)
 		if f in _SO:
 			doc.set(f, flt(v) if v not in (None, "") else None)
+		elif f == "chi_tiet_hang":
+			doc.set(f, _van_ban_dan(v))
 		else:
 			doc.set(f, cstr(v).strip() or None)
-	if "items" in payload:
-		doc.set("items", [])
-		for it in payload.get("items") or []:
-			if not cstr(it.get("item_code")).strip():
-				continue
-			doc.append("items", {
-				"item_code": cstr(it.get("item_code")).strip(),
-				"uom": cstr(it.get("uom")).strip() or None,
-				"qty": flt(it.get("qty")),
-				"ghi_chu": cstr(it.get("ghi_chu")).strip() or None,
-			})
 	if doc.is_new():
 		doc.insert(ignore_permissions=True)
 	else:
@@ -486,10 +415,20 @@ def xoa_lo(name):
 
 # ── File đính kèm ───────────────────────────────────────────────────────────
 def _nhan_file(name):
-	"""Lưu MỌI file trong multipart (field 'file', gửi nhiều lần được) — PRIVATE."""
+	"""Lưu MỌI file trong multipart (field 'file', gửi nhiều lần được) — PRIVATE.
+
+	Soát đuôi file TRƯỚC khi lưu cái nào: một lượt nhiều file mà có một file bị từ chối thì
+	không lưu nửa vời.
+	"""
 	files = frappe.request.files.getlist("file") if frappe.request and frappe.request.files else []
 	if not files:
 		frappe.throw(_("Thiếu file."))
+	for f in files:
+		if _duoi(f.filename) not in DUOI_DINH_KEM:
+			frappe.throw(_(
+				"Không đính kèm được '{0}'. Nhận: ảnh, PDF, Excel (xls/xlsx/csv), Word (doc/docx), "
+				"txt, mail (eml/msg), file nén (zip/rar/7z)."
+			).format(f.filename or "?"))
 	for f in files:
 		frappe.get_doc({
 			"doctype": "File",
@@ -506,7 +445,7 @@ def _nhan_file(name):
 
 @frappe.whitelist()
 def upload_dinh_kem(name):
-	"""Đính kèm phiếu xuất trả / biên bản / ảnh hàng (multipart, nhiều file một lần)."""
+	"""Đính kèm phiếu xuất trả / mail / file Excel hàng trả / ảnh hàng (multipart, nhiều file)."""
 	_require()
 	if not frappe.db.exists(DT, name):
 		frappe.throw(_("Không tìm thấy lô thu hồi {0}.").format(name))
@@ -530,79 +469,18 @@ def xoa_dinh_kem(name, file):
 def xem_dinh_kem(file):
 	"""Trả nội dung file đính kèm của một lô — guard thay cho DocPerm.
 
-	Điều hành / tổ trưởng / quản trị xem mọi lô; lái xe chỉ lô giao cho mình.
-	`display_content_as = inline` để ảnh hiện trong thẻ <img> và PDF mở được trong tab.
+	Ảnh / PDF `inline` (ảnh hiện trong <img>, PDF mở trong tab); loại khác TẢI VỀ. Không bao
+	giờ inline một loại ngoài `DUOI_XEM_TRONG_TAB`: file cũ / file gắn bằng Desk có thể là
+	.html / .svg, mà inline trên tên miền của site là script chạy bằng phiên của người xem
+	(Frappe tự ép tải về các loại này ở /private/files — proxy này phải làm y vậy).
 	"""
-	f = frappe.db.get_value("File", file, ["attached_to_doctype", "attached_to_name", "file_name"],
-		as_dict=True)
+	_require()
+	f = frappe.db.get_value("File", file, ["attached_to_doctype", "file_name"], as_dict=True)
 	if not f or f.attached_to_doctype != DT:
 		frappe.throw(_("Không tìm thấy file."), frappe.DoesNotExistError)
-	if not (is_admin() or is_to_truong() or frappe.has_permission("Sales Invoice", "write")):
-		_require_lo_cua_toi(f.attached_to_name)
 	frappe.local.response.filename = f.file_name or "dinh-kem"
 	frappe.local.response.filecontent = frappe.get_doc("File", file).get_content()
 	frappe.local.response.type = "download"
-	frappe.local.response.display_content_as = "inline"
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# LÁI XE — khối "Lấy hàng thu hồi" trong #/chuyen
-# ═══════════════════════════════════════════════════════════════════════════
-
-@frappe.whitelist()
-def cua_toi():
-	"""Lô giao cho tôi: còn chờ lấy, và lô tôi vừa lấy HÔM NAY (để còn bấm nhầm thì sửa).
-
-	KHÔNG trả số tiền nào (`gia_tri_khai` không có ở đây) — cùng luật `lai_xe.get_my_trips`.
-	"""
-	driver = require_driver()
-	rows = frappe.db.sql(
-		f"""SELECT name, trang_thai, ngay_yeu_cau, ngay_hen_lay, customer_name, ten_diem, ma_diem,
-		       dia_chi, sdt_diem, nguoi_lien_he, sdt_lien_he, so_phieu_sieu_thi, so_kien_du_kien,
-		       so_dinh_kem, ghi_chu, lay_luc
-		FROM `tab{DT}`
-		WHERE lai_xe = %(d)s
-		  AND (trang_thai = %(tao)s OR (trang_thai = %(lay)s AND DATE(lay_luc) = %(hom_nay)s))
-		ORDER BY FIELD(trang_thai, %(tao)s, %(lay)s), (ngay_hen_lay IS NULL), ngay_hen_lay ASC,
-		         ngay_yeu_cau ASC""",
-		{"d": driver, "tao": TAO, "lay": DA_LAY, "hom_nay": nowdate()},
-		as_dict=True,
+	frappe.local.response.display_content_as = (
+		"inline" if _duoi(f.file_name) in DUOI_XEM_TRONG_TAB else "attachment"
 	)
-	names = [r.name for r in rows]
-	hang = {}
-	if names:
-		for it in frappe.get_all(
-			"Lo Thu Hoi Hang", filters={"parent": ["in", names], "parenttype": DT},
-			fields=["parent", "item_name", "item_code", "qty", "uom"], order_by="idx asc",
-			limit_page_length=0,
-		):
-			hang.setdefault(it.parent, []).append(
-				{"item_name": it.item_name or it.item_code, "qty": flt(it.qty), "uom": it.uom})
-	for r in rows:
-		r["items"] = hang.get(r.name, [])
-		_str_dates(r)
-	return rows
-
-
-@frappe.whitelist()
-def lai_xe_da_lay(name, huy=0):
-	"""Lái xe bấm "Đã lấy hàng" (huy=1: bấm nhầm → về "Tạo yêu cầu", khi chưa nhận về kho)."""
-	_require_lo_cua_toi(name)
-	doc = frappe.get_doc(DT, name)
-	if cint(huy):
-		if doc.trang_thai != DA_LAY:
-			frappe.throw(_("Lô {0} không còn ở 'Đã lấy hàng' — báo điều phối nếu cần sửa.").format(name))
-		_dat_chang(doc, TAO)
-	else:
-		if doc.trang_thai != TAO:
-			frappe.throw(_("Lô {0} đang ở '{1}', không phải chờ lấy.").format(name, doc.trang_thai))
-		_dat_chang(doc, DA_LAY)
-	doc.save(ignore_permissions=True)
-	return {"name": doc.name, "trang_thai": doc.trang_thai, "lay_luc": str(doc.lay_luc or "")}
-
-
-@frappe.whitelist()
-def lai_xe_upload(name):
-	"""Lái xe chụp phiếu xuất trả có chữ ký / ảnh hàng lúc lấy — gắn vào lô của mình."""
-	_require_lo_cua_toi(name)
-	return _nhan_file(name)

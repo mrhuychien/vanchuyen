@@ -46,18 +46,21 @@ lái xe thường không vào được.
 
 Một **lô thu hồi** (`Lo Thu Hoi`, `TH-.YYYY.-.####`) = một lần siêu thị gọi trả hàng:
 khách + **điểm lấy hàng** (`shipping_address_name`, phải là Address của chính khách),
-ngày yêu cầu, số phiếu xuất trả của siêu thị, hàng siêu thị **khai**, giao xe, và
-**file đính kèm** (private — xem qua `thu_hoi.xem_dinh_kem` có guard).
+ngày yêu cầu, số phiếu xuất trả của siêu thị, **chi tiết hàng dán nguyên văn từ mail**
+siêu thị gửi, **điều phối thu hồi** (đơn vị vận chuyển Viettel Post / Nhất Tín vào lấy:
+đơn vị, mã vận đơn nếu có, ngày thu, số kiện) và **file đính kèm** — ảnh, PDF, Excel, Word,
+mail (.eml/.msg), file nén; private, xem qua `thu_hoi.xem_dinh_kem` có guard (ảnh / PDF mở
+trong tab, loại khác tải về). Mã hàng + số lượng chính xác do kế toán ghi lúc kiểm hàng.
 
 | Chặng | Ai bấm | Ở đâu |
 |---|---|---|
-| Tạo yêu cầu → Đã lấy hàng → Đã nhận hàng | điều hành / tổ trưởng; lái xe bấm "Đã lấy hàng" cho lô của mình | `#/thu-hoi`, `#/chuyen` |
+| Tạo yêu cầu → Đã lấy hàng → Đã nhận hàng | điều hành / tổ trưởng (theo tin của đơn vị thu hồi) | `#/thu-hoi` |
 | Đang kiểm → Đã kiểm hàng → Đã nhập chứng từ → Xong | kế toán (app `ketoan`, phiếu `Kiem Hang Thu Hoi`) | portal `/ketoan#/thu-hoi` |
 
 App này **chỉ đọc mềm** phiếu kiểm bên ketoan để hiện chặng tổng; khi kế toán đã mở
 phiếu kiểm thì khách / điểm bị khóa, không lùi chặng hay xóa lô được nữa. Thiết kế
 đầy đủ: [`docs/thu-hoi/blueprint-thu-hoi.md`](docs/thu-hoi/blueprint-thu-hoi.md).
-Cài bản này cần `bench --site <site> migrate` (2 DocType mới).
+Cài / cập nhật bản này cần `bench --site <site> migrate`.
 
 ## Verify trước khi ship
 
@@ -67,6 +70,7 @@ for f in vanchuyen/public/vanchuyen/**/*.js; do node --check "$f"; done
 python3 .claude/skills/nextcode-build/references/validate_shipped_docs.py apps/vanchuyen/vanchuyen
 python3 docs/verified/lo_nguyen_check.py     # lô nguyên (0 kiện + hộp lẻ) — chạy KHÔNG cần bench
 python3 docs/verified/thu_hoi_check.py       # lô thu hồi: đúng điểm của khách, khóa khi kế toán đã kiểm
+python3 docs/verified/thu_hoi_ui_check.py    # màn thu hồi trong Chromium (cần pip install playwright)
 python3 docs/verified/quan_ly_xe_check.py    # lịch đăng kiểm/thay dầu + lọc xe tải còn dùng ở Xếp chuyến
 ```
 

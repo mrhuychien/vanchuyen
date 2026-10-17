@@ -1,5 +1,10 @@
 """Lo Thu Hoi — MỘT LẦN khách (siêu thị) gọi trả hàng: đi lấy, rồi nhận về kho.
 
+Hàng trả do ĐƠN VỊ VẬN CHUYỂN NGOÀI vào lấy (Viettel Post / Nhất Tín): lô chỉ giữ đơn vị,
+mã vận đơn (nếu có), ngày thu, số kiện — không giao lái xe / xe của công ty. Chi tiết hàng
+cần thu là bản DÁN NGUYÊN VĂN từ mail siêu thị (`chi_tiet_hang`); mã hàng + số lượng chính
+xác do kế toán ghi ở phiếu kiểm hàng bên ketoan.
+
 ════════════════════════════════════════════════════════════════════════════
 BA CHẶNG CỦA VẬN CHUYỂN, BA CHẶNG CỦA KẾ TOÁN
 ════════════════════════════════════════════════════════════════════════════
@@ -34,7 +39,7 @@ biết. Lùi chặng ("chưa nhận hàng") khi hàng đã được đếm cũng
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import cstr, flt
+from frappe.utils import cstr
 
 TAO = "Tạo yêu cầu"
 DA_LAY = "Đã lấy hàng"
@@ -49,7 +54,9 @@ CHANG_KE_TOAN = (DANG_KIEM, "Đã kiểm hàng", "Đã nhập chứng từ", "Xo
 # thanh tiến độ đều theo đúng thứ tự này.
 CHANG = TRANG_THAI + CHANG_KE_TOAN
 
-EPS = 0.0001
+# Bảng hàng khai cũ (bản đầu, trước khi chi tiết hàng chuyển sang kế toán). Không còn
+# field nào trỏ tới; giữ DocType để kế toán vẫn đọc được số khai của các lô cũ.
+HANG_CU = "Lo Thu Hoi Hang"
 
 
 def phieu_kiem(lo_names):
@@ -116,22 +123,11 @@ def ma_diem_mt(address, customer):
 	return cstr(r.store_code), cstr(r.store_name)
 
 
-def he_so_quy_doi(item_code, uom, stock_uom):
-	"""Hệ số uom → ĐVT kho. None = mã hàng chưa khai quy đổi cho ĐVT đó."""
-	if not uom or uom == stock_uom:
-		return 1.0
-	cf = frappe.db.get_value(
-		"UOM Conversion Detail", {"parent": item_code, "parenttype": "Item", "uom": uom}, "conversion_factor"
-	)
-	return flt(cf) if flt(cf) > 0 else None
-
-
 class LoThuHoi(Document):
 	def before_validate(self):
 		self._chep_khach()
 		self._chep_diem()
-		self._chep_lai_xe()
-		self._quy_doi_hang()
+		self.ma_van_don = cstr(self.get("ma_van_don")).strip() or None
 		self.so_dinh_kem = frappe.db.count(
 			"File", {"attached_to_doctype": self.doctype, "attached_to_name": self.name}
 		) if self.name and not self.is_new() else 0
@@ -146,7 +142,6 @@ class LoThuHoi(Document):
 					"danh sách địa chỉ CỦA KHÁCH NÀY — hóa đơn trả về dựng trên đúng điểm đó."
 				).format(self.shipping_address_name, self.customer)
 			)
-		self._kiem_hang()
 		self._khoa_khi_ke_toan_da_kiem()
 
 	def on_trash(self):
@@ -157,6 +152,9 @@ class LoThuHoi(Document):
 					"trả về mất gốc — nhờ kế toán xóa phiếu kiểm trước."
 				).format(self.name)
 			)
+		# Dòng hàng khai của bản cũ không còn field cha → Frappe không tự xóa theo lô.
+		if frappe.db.table_exists(HANG_CU):
+			frappe.db.delete(HANG_CU, {"parent": self.name, "parenttype": self.doctype})
 
 	# ── chép phần hiển thị: SERVER làm, không tin client ─────────────────────
 	def _chep_khach(self):
@@ -180,56 +178,6 @@ class LoThuHoi(Document):
 		self.ma_diem = ma or None
 		self.dia_chi = format_dia_chi(a)
 		self.sdt_diem = cstr(a.phone) or None
-
-	def _chep_lai_xe(self):
-		if not self.lai_xe:
-			self.ten_lai_xe = self.sdt_lai_xe = None
-			return
-		d = frappe.db.get_value("Driver", self.lai_xe, ["full_name", "cell_number"], as_dict=True) or {}
-		self.ten_lai_xe = d.get("full_name") or self.lai_xe
-		self.sdt_lai_xe = d.get("cell_number")
-
-	def _quy_doi_hang(self):
-		tong = 0.0
-		for r in self.items or []:
-			if not r.item_code:
-				continue
-			it = frappe.db.get_value("Item", r.item_code, ["item_name", "stock_uom"], as_dict=True)
-			if not it:
-				continue
-			r.item_name = it.item_name
-			r.stock_uom = it.stock_uom
-			r.uom = r.uom or it.stock_uom
-			cf = he_so_quy_doi(r.item_code, r.uom, it.stock_uom)
-			# Hệ số chưa khai thì để trống: `_kiem_hang` nói ra ở dòng nào. Tự lấy 1 là
-			# biến "3 thùng" thành "3 hộp" — số khai sai mười mấy lần mà không ai thấy.
-			r.conversion_factor = cf
-			r.stock_qty = flt(r.qty) * cf if cf else None
-			tong += flt(r.stock_qty)
-		self.tong_sl_khai = tong
-
-	def _kiem_hang(self):
-		thay = {}
-		for r in self.items or []:
-			if not r.item_code:
-				frappe.throw(_("Dòng {0}: chưa chọn mã hàng.").format(r.idx))
-			if flt(r.qty) <= 0:
-				frappe.throw(_("Dòng {0} ({1}): số lượng khai phải > 0.").format(r.idx, r.item_code))
-			if not r.conversion_factor:
-				frappe.throw(
-					_("Dòng {0}: mã {1} chưa khai quy đổi đơn vị {2} → {3} trên Item.").format(
-						r.idx, r.item_code, r.uom, r.stock_uom
-					)
-				)
-			# MỘT mã MỘT dòng. Hai dòng cùng mã thì phép so "khai vs kiểm" bên kế toán
-			# phải tự cộng lại — và chỗ phải tự cộng là chỗ cộng sót.
-			if r.item_code in thay:
-				frappe.throw(
-					_("Mã {0} xuất hiện ở dòng {1} và {2} — gộp vào một dòng.").format(
-						r.item_code, thay[r.item_code], r.idx
-					)
-				)
-			thay[r.item_code] = r.idx
 
 	def _khoa_khi_ke_toan_da_kiem(self):
 		if self.is_new():

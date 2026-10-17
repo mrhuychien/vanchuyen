@@ -1,12 +1,14 @@
 // #/thu-hoi/:id — MỘT lô thu hồi. id = "new" là tạo yêu cầu xuất trả mới.
 //
-// Thứ tự khối = thứ tự người điều hành làm khi nhận phiếu xuất trả của siêu thị:
-// khách → điểm lấy hàng → thông tin phiếu → giao xe → hàng khai → đính kèm phiếu.
-// Server là sự thật: địa chỉ phải thuộc khách, quy đổi ĐVT, khóa khi kế toán đã kiểm —
-// màn hình chỉ kiểm cho mượt tay và hiện nguyên văn câu báo của server.
+// Thứ tự khối = thứ tự người điều hành làm khi siêu thị báo trả hàng:
+// khách → điểm lấy hàng → thông tin phiếu → dán chi tiết hàng từ mail → đơn vị thu hồi
+// (Viettel Post / Nhất Tín vào lấy) → đính kèm. Mã hàng + số lượng chính xác là việc của
+// kế toán lúc kiểm hàng — màn này không bắt gõ từng mã.
+// Server là sự thật: địa chỉ phải thuộc khách, đuôi file đính kèm, khóa khi kế toán đã
+// kiểm — màn hình chỉ kiểm cho mượt tay và hiện nguyên văn câu báo của server.
 import { call, upload, errText } from "../lib/api.js";
 import { skeleton } from "../lib/dom.js";
-import { escapeHtml, formatDate, formatQty } from "../lib/format.js";
+import { escapeHtml, formatDate } from "../lib/format.js";
 import { go, replace } from "../lib/router.js";
 import { showToast } from "../components/toast.js";
 import { confirmDialog } from "../components/confirm.js";
@@ -18,10 +20,26 @@ const VC = CHANG_FALLBACK.slice(0, VAN_CHUYEN); // ba chặng vận chuyển
 let ROOT = null;
 let D = null; // bản ghi từ server (null khi tạo mới)
 let F = null; // trạng thái form
-let OPT = null; // lái xe, xe, chuyến, lý do
+let OPT = null; // lý do trả, đơn vị thu hồi
 let DIRTY = false;
 let CHO_FILE = []; // file chọn khi CHƯA lưu lần đầu — gửi ngay sau khi tạo xong
-let DIA_CHI = null; // danh sách địa chỉ của khách đang chọn
+let DIA_CHI = null; // danh sách địa chỉ của khách đang chọn (null = chưa tải)
+let DOI_DIEM = false; // đã có điểm mà người dùng bấm "Đổi điểm" → mở lại danh sách
+
+// Đuôi file nhận đính kèm — KHỚP `DUOI_DINH_KEM` ở api/thu_hoi.py (server mới là chốt; ở
+// đây lọc trước để khỏi tải một file 10MB lên rồi mới bị từ chối).
+const DUOI = new Set(["jpg", "jpeg", "png", "webp", "gif", "heic", "heif", "pdf",
+	"xls", "xlsx", "xlsm", "csv", "ods", "doc", "docx", "odt", "rtf", "txt",
+	"eml", "msg", "zip", "rar", "7z"]);
+const ACCEPT = "image/*,application/pdf," + [...DUOI].filter((d) => !/^(jpe?g|png|webp|gif|hei[cf])$/.test(d)).map((d) => "." + d).join(",");
+const duoi = (ten) => ((String(ten || "").match(/\.([^.]+)$/) || [])[1] || "").toLowerCase();
+const ICON = {
+	pdf: "fa-file-pdf", xls: "fa-file-excel", xlsx: "fa-file-excel", xlsm: "fa-file-excel", ods: "fa-file-excel",
+	csv: "fa-file-csv", doc: "fa-file-word", docx: "fa-file-word", odt: "fa-file-word", rtf: "fa-file-word",
+	txt: "fa-file-lines", eml: "fa-envelope", msg: "fa-envelope", zip: "fa-file-zipper", rar: "fa-file-zipper", "7z": "fa-file-zipper",
+};
+// Loại server mở thẳng trong tab (`DUOI_XEM_TRONG_TAB`); loại khác server trả dạng tải xuống.
+const XEM_TRONG_TAB = new Set(["jpg", "jpeg", "png", "webp", "gif", "pdf"]);
 
 export async function render({ container, params }) {
 	ROOT = container;
@@ -42,16 +60,16 @@ export async function render({ container, params }) {
 	DIRTY = false;
 	CHO_FILE = [];
 	DIA_CHI = null;
+	DOI_DIEM = false;
 	draw();
-	if (F.customer && !khoaKhach()) loadDiaChi("");
 }
 
 function formFrom(d) {
 	const base = {
 		customer: "", customer_name: "", shipping_address_name: "", diem: null,
 		ngay_yeu_cau: OPT.today, so_phieu_sieu_thi: "", ly_do: "", nguoi_lien_he: "", sdt_lien_he: "",
-		ghi_chu: "", ngay_hen_lay: "", lai_xe: "", xe: "", chuyen_xe: "", so_kien_du_kien: "",
-		so_kien_nhan: "", gia_tri_khai: "", items: [],
+		ghi_chu: "", chi_tiet_hang: "", don_vi_thu_hoi: "", ma_van_don: "", ngay_hen_lay: "",
+		so_kien_du_kien: "", so_kien_nhan: "", gia_tri_khai: "",
 	};
 	if (!d) return base;
 	const f = { ...base };
@@ -59,7 +77,6 @@ function formFrom(d) {
 	f.diem = d.shipping_address_name
 		? { name: d.shipping_address_name, ten: d.ten_diem, ma: d.ma_diem, dia_chi: d.dia_chi, phone: d.sdt_diem }
 		: null;
-	f.items = (d.items || []).map((r) => ({ ...r }));
 	return f;
 }
 
@@ -71,7 +88,7 @@ function draw() {
 	ROOT.innerHTML = `
 		${D ? headCard(ds) : `<div class="vc-view-banner"><div>
 			<div class="vc-view-banner-title">Tạo yêu cầu xuất trả</div>
-			<div class="vc-view-banner-subtitle">Siêu thị gọi trả hàng → giao xe vào lấy</div></div>
+			<div class="vc-view-banner-subtitle">Siêu thị báo trả hàng → đơn vị vận chuyển vào lấy</div></div>
 			<div class="vc-view-banner-badge"><i class="fas fa-rotate-left"></i></div></div>`}
 		<div class="vc-card vc-th-sec">
 			<div class="vc-section-title">Khách hàng &amp; điểm lấy hàng</div>
@@ -82,7 +99,7 @@ function draw() {
 			<div class="vc-th-grid">
 				${inp("ngay_yeu_cau", "Ngày yêu cầu *", "date")}
 				${inp("so_phieu_sieu_thi", "Số phiếu xuất trả (siêu thị)")}
-				${sel("ly_do", "Lý do trả", [""].concat(OPT.ly_do || []).map((x) => [x, x || "— chọn —"]))}
+				${sel("ly_do", "Lý do trả", giuGiaTri("ly_do", [""].concat(OPT.ly_do || []).map((x) => [x, x || "— chọn —"])))}
 				${inp("gia_tri_khai", "Giá trị theo phiếu siêu thị", "number")}
 				${inp("nguoi_lien_he", "Người liên hệ ở điểm")}
 				${inp("sdt_lien_he", "SĐT liên hệ", "tel")}
@@ -92,27 +109,27 @@ function draw() {
 			<div class="vc-text-sm vc-text-muted">Ngày yêu cầu = ngày siêu thị gọi / ngày trên phiếu xuất trả. Tuổi của lô tính từ ngày này.</div>
 		</div>
 		<div class="vc-card vc-th-sec">
-			<div class="vc-section-title">Điều phối lấy hàng</div>
+			<div class="vc-section-title">Chi tiết hàng cần thu</div>
+			<div class="vc-text-sm vc-text-muted vc-mb-2">Siêu thị gửi danh sách hàng qua mail thì copy cả bảng dán NGUYÊN VĂN vào đây.
+				Mã hàng + số lượng chính xác kế toán ghi lúc kiểm hàng.</div>
+			<textarea class="vc-input vc-th-paste" data-f="chi_tiet_hang" rows="8" spellcheck="false"
+				placeholder="Dán nội dung mail siêu thị gửi — danh sách hàng cần thu...">${escapeHtml(F.chi_tiet_hang || "")}</textarea>
+		</div>
+		<div class="vc-card vc-th-sec">
+			<div class="vc-section-title">Điều phối thu hồi</div>
+			<div class="vc-text-sm vc-text-muted vc-mb-2">Đơn vị vận chuyển vào siêu thị lấy hàng trả về công ty.</div>
 			<div class="vc-th-grid">
-				${inp("ngay_hen_lay", "Ngày hẹn lấy", "date")}
-				${sel("lai_xe", "Lái xe", giuGiaTri("lai_xe", [["", "— chưa giao —"]].concat((OPT.drivers || []).map((d) => [d.name, `${d.full_name || d.name}${d.cell_number ? " · " + d.cell_number : ""}`]))))}
-				${sel("xe", "Xe", giuGiaTri("xe", [["", "— chọn xe —"]].concat((OPT.vehicles || []).map((v) => [v.name, [v.name, v.make, v.model].filter(Boolean).join(" · ")]))))}
-				${sel("chuyen_xe", "Đi kèm chuyến (tùy chọn)", giuGiaTri("chuyen_xe", [["", "— không —"]].concat((OPT.trips || []).map((t) => [t.name, `${t.name} · ${formatDate(t.ngay_giao)} · ${t.ten_lai_xe || ""}`]))))}
-				${inp("so_kien_du_kien", "Số kiện dự kiến", "number")}
+				${sel("don_vi_thu_hoi", "Đơn vị thu hồi", giuGiaTri("don_vi_thu_hoi", [["", "— chọn —"]].concat((OPT.don_vi || []).map((x) => [x, x]))))}
+				${inp("ma_van_don", "Mã vận đơn (nếu có)")}
+				${inp("ngay_hen_lay", "Ngày thu", "date")}
+				${inp("so_kien_du_kien", "Số kiện (theo vận đơn)", "number")}
 				${D ? inp("so_kien_nhan", "Số kiện thực nhận", "number") : ""}
 			</div>
 		</div>
 		<div class="vc-card vc-th-sec">
-			<div class="vc-section-title">Hàng siêu thị khai trả</div>
-			<div class="vc-text-sm vc-text-muted vc-mb-2">Theo phiếu xuất trả — số KHAI. Kế toán đếm riêng lúc kiểm hàng rồi mới so.</div>
-			<input class="vc-input" id="th-item-q" type="search" autocomplete="off" placeholder="➕ Thêm mã: gõ mã / tên / mã vạch..." />
-			<div id="th-item-res"></div>
-			<div id="th-items"></div>
-		</div>
-		<div class="vc-card vc-th-sec">
 			<div class="vc-section-title">Chứng từ đính kèm</div>
-			<label class="vc-photo-btn"><i class="fas fa-paperclip"></i> Chọn file (ảnh / PDF)
-				<input type="file" id="th-file" multiple accept="image/*,application/pdf" style="display:none" /></label>
+			<label class="vc-photo-btn"><i class="fas fa-paperclip"></i> Chọn file (ảnh / PDF / Excel / Word / mail...)
+				<input type="file" id="th-file" multiple accept="${ACCEPT}" style="display:none" /></label>
 			<div id="th-files" class="vc-mt-2"></div>
 		</div>
 		<div class="vc-th-actions">
@@ -120,7 +137,6 @@ function draw() {
 			<button class="vc-btn-primary" id="th-save" style="flex:1"><i class="fas fa-floppy-disk"></i> ${D ? "Lưu thay đổi" : "Tạo yêu cầu"}</button>
 		</div>`;
 	drawKhach();
-	drawItems();
 	drawFiles();
 	bind();
 }
@@ -130,6 +146,9 @@ function headCard(ds) {
 	const tien = i >= 0 && i < VC.length - 1 ? VC[i + 1] : null;
 	const lui = i > 0 && !D.khoa_ke_toan ? VC[i - 1] : null;
 	const moc = (nhan, luc, ai) => (luc ? `<dt>${nhan}</dt><dd>${escapeHtml(fmtLuc(luc))}${ai ? " · " + escapeHtml(ai) : ""}</dd>` : "");
+	const thuHoi = [D.don_vi_thu_hoi, D.ma_van_don ? "VĐ " + D.ma_van_don : "", D.ngay_hen_lay ? "thu " + formatDate(D.ngay_hen_lay) : ""]
+		.filter(Boolean)
+		.join(" · ");
 	return `
 	<div class="vc-card vc-th-sec">
 		<div class="vc-order-head">
@@ -142,6 +161,7 @@ function headCard(ds) {
 		${changBar(D.chang, ds)}
 		<dl class="vc-detail-list vc-mt-2">
 			<dt>Yêu cầu</dt><dd>${escapeHtml(formatDate(D.ngay_yeu_cau))}</dd>
+			${thuHoi ? `<dt>Thu hồi</dt><dd>${escapeHtml(thuHoi)}</dd>` : ""}
 			${moc("Lấy hàng", D.lay_luc, D.lay_boi)}
 			${moc("Nhận về kho", D.nhan_luc, D.nhan_boi)}
 		</dl>
@@ -162,8 +182,8 @@ function inp(f, label, type = "text") {
 		<input class="vc-input" data-f="${f}" type="${type}" value="${escapeHtml(v)}"${extra} /></div>`;
 }
 
-// Giá trị đang gắn trên lô mà danh sách chọn đã lọc bỏ (xe ngừng dùng / xe con, lái xe
-// đã nghỉ, chuyến đã xong): vẫn hiện đúng nó — ô chọn không được trông như "chưa chọn".
+// Giá trị đang lưu trên lô mà danh sách chọn không còn (lựa chọn Select vừa đổi trên Desk):
+// vẫn hiện đúng nó — ô chọn không được trông như "chưa chọn".
 function giuGiaTri(f, opts) {
 	const v = F[f];
 	return !v || opts.some(([x]) => String(x) === String(v)) ? opts : opts.concat([[v, `${v} (đã ẩn khỏi danh sách)`]]);
@@ -177,31 +197,45 @@ function sel(f, label, opts) {
 
 function drawKhach() {
 	const box = ROOT.querySelector("#th-khach");
-	const diem = F.diem
-		? `<div class="vc-th-diem vc-th-diem-on">
-			<div class="vc-font-bold">🏬 ${escapeHtml(F.diem.ten || F.diem.name)}${F.diem.ma ? ` <span class="vc-badge vc-badge-muted">${escapeHtml(F.diem.ma)}</span>` : ""}</div>
-			<div class="vc-text-sm vc-text-muted">${escapeHtml(F.diem.dia_chi || "")}${F.diem.phone ? " · ☎ " + escapeHtml(F.diem.phone) : ""}</div>
-			<div class="vc-text-sm vc-text-muted">${escapeHtml(F.diem.name)}</div></div>`
-		: "";
+	// Điểm đã chọn: thẻ gọn + nút đổi. Danh sách điểm chỉ mở khi CHƯA chọn hoặc bấm "Đổi
+	// điểm" — chọn xong thì thu lại, như ô khách.
+	const theDiem = (nut) =>
+		F.diem
+			? `<div class="vc-th-diem vc-th-diem-on vc-th-diem-chon">
+				<div class="vc-th-diem-info">
+					<div class="vc-font-bold">🏬 ${escapeHtml(F.diem.ten || F.diem.name)}${F.diem.ma ? ` <span class="vc-badge vc-badge-muted">${escapeHtml(F.diem.ma)}</span>` : ""}</div>
+					<div class="vc-text-sm vc-text-muted">${escapeHtml(F.diem.dia_chi || "")}${F.diem.phone ? " · ☎ " + escapeHtml(F.diem.phone) : ""}</div>
+					<div class="vc-text-sm vc-text-muted">${escapeHtml(F.diem.name)}</div>
+				</div>${nut}</div>`
+			: "";
 	if (khoaKhach()) {
 		box.innerHTML = `<div class="vc-font-bold">${escapeHtml(F.customer_name || F.customer)}</div>
-			<div class="vc-text-sm vc-text-muted vc-mb-2">${escapeHtml(F.customer)}</div>${diem}`;
+			<div class="vc-text-sm vc-text-muted vc-mb-2">${escapeHtml(F.customer)}</div>${theDiem("")}`;
 		return;
 	}
+	if (!F.customer) {
+		box.innerHTML = `<div class="vc-field"><label>Khách hàng *</label>
+			<input class="vc-input" id="th-cust-q" type="search" autocomplete="off" placeholder="Gõ tên / mã khách (Co.op, BigC, Lotte...)" /></div>
+			<div id="th-cust-res"></div>`;
+		return;
+	}
+	const moList = !F.diem || DOI_DIEM;
 	box.innerHTML = `
-		${F.customer
-			? `<div class="vc-flex vc-items-center vc-justify-between vc-gap-2 vc-mb-2">
-				<div><div class="vc-font-bold">${escapeHtml(F.customer_name || F.customer)}</div>
-				<div class="vc-text-sm vc-text-muted">${escapeHtml(F.customer)}</div></div>
-				<button class="vc-btn-ghost" id="th-doi-khach">Đổi khách</button></div>`
-			: `<div class="vc-field"><label>Khách hàng *</label>
-				<input class="vc-input" id="th-cust-q" type="search" autocomplete="off" placeholder="Gõ tên / mã khách (Co.op, BigC, Lotte...)" /></div>
-				<div id="th-cust-res"></div>`}
-		${F.customer ? `${diem}
-			<div class="vc-field vc-mt-2"><label>${F.diem ? "Đổi điểm lấy hàng" : "Điểm lấy hàng *"}</label>
+		<div class="vc-flex vc-items-center vc-justify-between vc-gap-2 vc-mb-2">
+			<div><div class="vc-font-bold">${escapeHtml(F.customer_name || F.customer)}</div>
+			<div class="vc-text-sm vc-text-muted">${escapeHtml(F.customer)}</div></div>
+			<button class="vc-btn-ghost" id="th-doi-khach">Đổi khách</button></div>
+		${
+			moList
+				? `<div class="vc-field vc-mt-2"><label>${F.diem ? "Đổi điểm lấy hàng" : "Điểm lấy hàng *"}</label>
 				<input class="vc-input" id="th-diem-q" type="search" autocomplete="off" placeholder="Tìm điểm theo tên / mã / địa chỉ..." /></div>
-			<div id="th-diem-res"></div>` : ""}`;
-	if (F.customer) drawDiaChi();
+				<div id="th-diem-res"></div>
+				${F.diem ? `<button type="button" class="vc-btn-ghost vc-mt-2" id="th-giu-diem">Giữ điểm cũ: ${escapeHtml(F.diem.ten || F.diem.name)}</button>` : ""}`
+				: theDiem(`<button type="button" class="vc-btn-ghost" id="th-doi-diem">Đổi điểm</button>`)
+		}`;
+	if (!moList) return;
+	if (DIA_CHI === null) loadDiaChi("");
+	else drawDiaChi();
 }
 
 function drawDiaChi() {
@@ -226,6 +260,7 @@ function drawDiaChi() {
 			if (!a) return;
 			F.shipping_address_name = a.name;
 			F.diem = a;
+			DOI_DIEM = false; // chọn xong thì thu danh sách lại
 			DIRTY = true;
 			drawKhach();
 			bindKhach();
@@ -245,65 +280,17 @@ async function loadDiaChi(tim) {
 	drawDiaChi();
 }
 
-function drawItems() {
-	const box = ROOT.querySelector("#th-items");
-	if (!F.items.length) {
-		box.innerHTML = `<div class="vc-text-sm vc-text-muted vc-mt-2">Chưa có mã nào. Không bắt buộc — nhưng có số khai thì kế toán mới so được lệch.</div>`;
-		return;
-	}
-	box.innerHTML = `<div class="vc-th-rows">${F.items
-		.map((r, i) => {
-			const uoms = r.uoms && r.uoms.length ? r.uoms : [{ uom: r.uom || r.stock_uom, he_so: 1 }];
-			return `<div class="vc-th-row">
-				<div class="vc-th-row-name"><div class="vc-font-bold vc-text-sm">${escapeHtml(r.item_name || r.item_code)}</div>
-					<div class="vc-text-sm vc-text-muted">${escapeHtml(r.item_code)}</div></div>
-				<input class="vc-input vc-th-qty" data-i="${i}" data-k="qty" type="number" inputmode="decimal" step="any" min="0" value="${escapeHtml(r.qty)}" />
-				<select class="vc-input vc-th-uom" data-i="${i}" data-k="uom">${uoms
-					.map((u) => `<option value="${escapeHtml(u.uom)}" ${u.uom === (r.uom || r.stock_uom) ? "selected" : ""}>${escapeHtml(u.uom)}${u.he_so > 1 ? ` (${formatQty(u.he_so)})` : ""}</option>`)
-					.join("")}</select>
-				<button type="button" class="vc-icon-btn" data-xoa="${i}" aria-label="Xóa dòng"><i class="fas fa-xmark"></i></button>
-			</div>`;
-		})
-		.join("")}</div>`;
-	box.querySelectorAll("[data-k]").forEach((el) =>
-		el.addEventListener("input", () => {
-			const r = F.items[Number(el.dataset.i)];
-			if (!r) return;
-			r[el.dataset.k] = el.dataset.k === "qty" ? Number(el.value) || 0 : el.value;
-			DIRTY = true;
-		})
-	);
-	box.querySelectorAll("[data-xoa]").forEach((b) =>
-		b.addEventListener("click", () => {
-			F.items.splice(Number(b.dataset.xoa), 1);
-			DIRTY = true;
-			drawItems();
-		})
-	);
-}
-
 function drawFiles() {
 	const box = ROOT.querySelector("#th-files");
 	if (!D) {
 		box.innerHTML = CHO_FILE.length
 			? `<div class="vc-text-sm">Sẽ gửi sau khi tạo: ${CHO_FILE.map((f) => escapeHtml(f.name)).join(", ")}</div>`
-			: `<div class="vc-text-sm vc-text-muted">Phiếu xuất trả của siêu thị (PDF/ảnh), biên bản, ảnh hàng...</div>`;
+			: `<div class="vc-text-sm vc-text-muted">Phiếu xuất trả của siêu thị (PDF / ảnh), mail, file Excel danh sách hàng, biên bản...</div>`;
 		return;
 	}
 	const files = D.files || [];
 	box.innerHTML = files.length
-		? `<div class="vc-th-files">${files
-				.map(
-					(f) => `<div class="vc-th-file">
-				<a href="${escapeHtml(f.url)}" target="_blank" rel="noopener">${
-					f.is_image
-						? `<img src="${escapeHtml(f.url)}" alt="" loading="lazy" />`
-						: `<div class="vc-th-file-icon"><i class="fas fa-file-lines"></i></div>`
-				}<div class="vc-th-file-name">${escapeHtml(f.file_name)}</div></a>
-				<button type="button" class="vc-icon-btn vc-th-file-x" data-file="${escapeHtml(f.name)}" aria-label="Gỡ file"><i class="fas fa-xmark"></i></button>
-			</div>`
-				)
-				.join("")}</div>`
+		? `<div class="vc-th-files">${files.map(theFile).join("")}</div>`
 		: `<div class="vc-text-sm vc-text-muted">Chưa có file nào.</div>`;
 	box.querySelectorAll("[data-file]").forEach((b) =>
 		b.addEventListener("click", () =>
@@ -326,6 +313,20 @@ function drawFiles() {
 	);
 }
 
+function theFile(f) {
+	const ext = f.ext || duoi(f.file_name);
+	// Ảnh / PDF mở tab mới; Excel / Word… server trả dạng tải xuống → `download`.
+	const mo = XEM_TRONG_TAB.has(ext) ? 'target="_blank" rel="noopener"' : `download="${escapeHtml(f.file_name)}"`;
+	return `<div class="vc-th-file">
+		<a href="${escapeHtml(f.url)}" ${mo}>${
+			f.is_image
+				? `<img src="${escapeHtml(f.url)}" alt="" loading="lazy" />`
+				: `<div class="vc-th-file-icon"><i class="fas ${ICON[ext] || "fa-file"}"></i></div>`
+		}<div class="vc-th-file-name">${escapeHtml(f.file_name)}</div></a>
+		<button type="button" class="vc-icon-btn vc-th-file-x" data-file="${escapeHtml(f.name)}" aria-label="Gỡ file"><i class="fas fa-xmark"></i></button>
+	</div>`;
+}
+
 // ── sự kiện ──────────────────────────────────────────────────────────────────
 function bind() {
 	ROOT.querySelectorAll("[data-f]").forEach((el) =>
@@ -335,7 +336,6 @@ function bind() {
 		})
 	);
 	bindKhach();
-	bindItemSearch();
 	ROOT.querySelector("#th-file").addEventListener("change", onFiles);
 	ROOT.querySelector("#th-save").addEventListener("click", save);
 	const del = ROOT.querySelector("#th-del");
@@ -350,7 +350,23 @@ function bindKhach() {
 			F.customer = F.customer_name = F.shipping_address_name = "";
 			F.diem = null;
 			DIA_CHI = null;
+			DOI_DIEM = false;
 			DIRTY = true;
+			drawKhach();
+			bindKhach();
+		});
+	const doiDiem = ROOT.querySelector("#th-doi-diem");
+	if (doiDiem)
+		doiDiem.addEventListener("click", () => {
+			DOI_DIEM = true;
+			DIA_CHI = null; // tải lại đủ danh sách — lần tìm trước có thể đã lọc bớt
+			drawKhach();
+			bindKhach();
+		});
+	const giu = ROOT.querySelector("#th-giu-diem");
+	if (giu)
+		giu.addEventListener("click", () => {
+			DOI_DIEM = false;
 			drawKhach();
 			bindKhach();
 		});
@@ -379,10 +395,11 @@ function bindKhach() {
 							F.customer_name = b.dataset.ten;
 							F.shipping_address_name = "";
 							F.diem = null;
+							DIA_CHI = null; // drawKhach tự tải danh sách điểm của khách mới
+							DOI_DIEM = false;
 							DIRTY = true;
 							drawKhach();
 							bindKhach();
-							loadDiaChi("");
 						})
 					);
 				} catch (e) {
@@ -401,49 +418,13 @@ function bindKhach() {
 	}
 }
 
-function bindItemSearch() {
-	const q = ROOT.querySelector("#th-item-q");
-	let t = null;
-	q.addEventListener("input", () => {
-		clearTimeout(t);
-		t = setTimeout(async () => {
-			const res = ROOT.querySelector("#th-item-res");
-			const v = q.value.trim();
-			if (!v) {
-				res.innerHTML = "";
-				return;
-			}
-			try {
-				const rows = await call("vanchuyen.api.thu_hoi.search_items", { tim: v });
-				res.innerHTML = rows.length
-					? rows.map((it, i) => `<button type="button" class="vc-th-diem" data-it="${i}">
-						<div class="vc-font-bold vc-text-sm">${escapeHtml(it.item_name || it.name)}</div>
-						<div class="vc-text-sm vc-text-muted">${escapeHtml(it.name)} · ĐVT kho ${escapeHtml(it.stock_uom || "")}</div></button>`).join("")
-					: '<div class="vc-text-sm vc-text-muted">Không tìm thấy mã hàng.</div>';
-				res.querySelectorAll("[data-it]").forEach((b) =>
-					b.addEventListener("click", () => {
-						const it = rows[Number(b.dataset.it)];
-						if (F.items.some((r) => r.item_code === it.name)) {
-							showToast("Mã này đã có — sửa số lượng ở dòng đó.", "warning");
-							return;
-						}
-						F.items.push({ item_code: it.name, item_name: it.item_name, uom: it.stock_uom, stock_uom: it.stock_uom, uoms: it.uoms, qty: 1 });
-						DIRTY = true;
-						q.value = "";
-						res.innerHTML = "";
-						drawItems();
-					})
-				);
-			} catch (e) {
-				showToast(errText(e), "error");
-			}
-		}, 300);
-	});
-}
-
 async function onFiles(e) {
-	const files = Array.from(e.target.files || []);
+	const chon = Array.from(e.target.files || []);
 	e.target.value = "";
+	const bo = chon.filter((f) => !DUOI.has(duoi(f.name)));
+	if (bo.length)
+		showToast(`Không đính kèm được: ${bo.map((f) => f.name).join(", ")} — chỉ nhận ảnh, PDF, Excel, Word, txt, mail, file nén`, "warning");
+	const files = chon.filter((f) => DUOI.has(duoi(f.name)));
 	if (!files.length) return;
 	if (!D) {
 		CHO_FILE = CHO_FILE.concat(files);
@@ -471,11 +452,11 @@ async function guiFile(name, files) {
 function payload() {
 	const p = {};
 	["ngay_yeu_cau", "so_phieu_sieu_thi", "ly_do", "customer", "shipping_address_name", "nguoi_lien_he", "sdt_lien_he",
-		"ghi_chu", "ngay_hen_lay", "lai_xe", "xe", "chuyen_xe", "so_kien_du_kien", "so_kien_nhan", "gia_tri_khai"].forEach((k) => {
+		"ghi_chu", "chi_tiet_hang", "don_vi_thu_hoi", "ma_van_don", "ngay_hen_lay", "so_kien_du_kien", "so_kien_nhan",
+		"gia_tri_khai"].forEach((k) => {
 		if (k === "so_kien_nhan" && !D) return;
 		p[k] = F[k];
 	});
-	p.items = F.items.map((r) => ({ item_code: r.item_code, uom: r.uom || r.stock_uom, qty: Number(r.qty) || 0, ghi_chu: r.ghi_chu || "" }));
 	return p;
 }
 
@@ -483,7 +464,6 @@ async function save() {
 	if (!F.customer) return showToast("Chọn khách hàng trước", "warning");
 	if (!F.shipping_address_name) return showToast("Chọn điểm lấy hàng (địa chỉ của khách)", "warning");
 	if (!F.ngay_yeu_cau) return showToast("Chọn ngày yêu cầu", "warning");
-	if (F.items.some((r) => !(Number(r.qty) > 0))) return showToast("Số lượng khai phải > 0 (hoặc xóa dòng)", "warning");
 	const btn = ROOT.querySelector("#th-save");
 	btn.disabled = true;
 	try {
@@ -498,6 +478,7 @@ async function save() {
 		}
 		F = formFrom(D);
 		DIRTY = false;
+		DOI_DIEM = false;
 		// Tạo xong thì đổi URL tại chỗ (không thêm một nấc "new" vào lịch sử) rồi vẽ lại
 		// bằng bản ghi thật — để còn đính kèm tiếp và chuyển chặng.
 		if (moi) replace("/thu-hoi/" + encodeURIComponent(D.name));
@@ -522,6 +503,7 @@ async function doiChang(chang, btn) {
 	try {
 		D = await call("vanchuyen.api.thu_hoi.chuyen_chang", { name: D.name, trang_thai: chang, so_kien_nhan: soKien });
 		F = formFrom(D);
+		DOI_DIEM = false;
 		draw();
 		showToast(`${D.name}: ${chang}`, "success");
 	} catch (e) {

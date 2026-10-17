@@ -9,17 +9,20 @@ SÁU CÁI LỖ MÀ BỘ KIỂM NÀY CANH
 1. **Điểm lấy hàng của khách khác.** Saigon Co.op chỉ có MỘT Customer cho mọi
    điểm, nên ô khách đúng mà ô điểm sai là chuyện dễ nhất — và nó trôi thẳng sang
    hóa đơn trả về bên kế toán. Chốt ở `LoThuHoi.validate` bằng Dynamic Link.
-2. **Đổi khách / điểm / lùi chặng SAU KHI kế toán đã mở phiếu kiểm.** Phiếu kiểm
+2. **Chi tiết hàng dán từ mail bị cắt méo.** Bảng hàng trong mail dán ra là các cột
+   cách nhau bằng tab; `.strip()` như ô thường là mất khoảng trắng đầu dòng, lệch cột.
+3. **Đổi khách / điểm / lùi chặng SAU KHI kế toán đã mở phiếu kiểm.** Phiếu kiểm
    chép khách + điểm lúc mở; đổi bên này là hai bảng nói về hai khách khác nhau.
    Xóa lô lúc đó là phiếu kiểm và hóa đơn trả về mất gốc.
-3. **Field mới bị bỏ qua im lặng.** `save_lo` chỉ nhận field trong `_UPDATABLE`;
-   màn hình gửi một field không có trong đó là người dùng gõ, bấm lưu, mất.
 4. **Dòng thời gian thủng.** Nhảy cóc "Tạo yêu cầu → Đã nhận hàng" phải đóng dấu
    cả mốc lấy hàng; lùi chặng phải xóa dấu của chặng bỏ.
-5. **Lái xe đụng lô của người khác / file của DocType khác qua proxy.**
-6. **Ô chọn xe lệch luật Xếp chuyến.** Xe đã bán / nằm gara / xe con phải ẩn như ở
-   Xếp chuyến (`nhat_ky_xe.xep_chuyen_duoc`), chạy trước migrate không được nổ
-   `Unknown column`, và giá trị đang gắn trên lô vẫn phải hiện ở ô chọn.
+5. **File đính kèm thành lỗ script.** Proxy `xem_dinh_kem` phục vụ file trên CHÍNH tên
+   miền của site: upload phải từ chối html / svg / js…, proxy chỉ mở trong tab ảnh /
+   PDF (còn lại tải về), guard ở dòng đầu, và chỉ file của `Lo Thu Hoi`.
+6. **Field mới bị bỏ qua im lặng / field cũ còn sót.** `save_lo` chỉ nhận field trong
+   `_UPDATABLE`; màn hình gửi một field không có trong đó là người dùng gõ, bấm lưu,
+   mất. Lái xe / xe / chuyến / bảng hàng khai đã bỏ (đơn vị vận chuyển ngoài lấy hàng,
+   kế toán lo chi tiết hàng) — không được sót ở DocType, API hay màn hình.
 
 Kèm hai luật vỏ portal: mọi module trong lib/ + components/ có trong import map
 (Luật vàng #1 frappe-portal-spa), và BUILD của shell khớp SHELL_BUILD của server.
@@ -29,6 +32,7 @@ Chạy KHÔNG CẦN BENCH:
 """
 
 import importlib
+import json
 import os
 import re
 import sys
@@ -68,11 +72,11 @@ class PermErr(Exception):
 ADDR_LINKS = set()      # (address, customer)
 TABLES = set()          # bảng đang có trên "site"
 KIEM = {}               # lô -> trạng thái phiếu kiểm bên ketoan
-ITEMS = {}              # item -> {item_name, stock_uom}
-UOM_CF = {}             # (item, uom) -> hệ số
-LO_LAI_XE = {}          # lô -> driver
 FILES = {}              # file -> {attached_to_doctype, attached_to_name, file_name}
-STATE = {"driver": None, "roles": [], "si_write": False}
+INSERTED = []           # File đã insert qua _nhan_file
+DELETED = []            # (doctype, filters) đã db.delete
+STATE = {"roles": [], "si_write": False, "upload": []}
+META_OPTIONS = {"ly_do": "\nHàng date / cận date\nHàng lỗi", "don_vi_thu_hoi": "\nViettel Post\nNhất Tín\nKhác"}
 
 
 def _stub_frappe():
@@ -96,6 +100,26 @@ def _stub_frappe():
     fr.get_all = lambda *a, **k: []
     fr.local = types.SimpleNamespace(response=_D())
 
+    class _Meta:
+        def get_field(self, f):
+            return _D(options=META_OPTIONS[f]) if f in META_OPTIONS else None
+
+    fr.get_meta = lambda dt: _Meta()
+
+    def _get_doc(dt, name=None):
+        if isinstance(dt, dict):  # File mới từ _nhan_file
+            return _D(insert=lambda **k: INSERTED.append(dt["file_name"]))
+        return _D(get_content=lambda: b"noi-dung")
+
+    fr.get_doc = _get_doc
+
+    class _Files:
+        def getlist(self, k):
+            return [types.SimpleNamespace(filename=n, stream=types.SimpleNamespace(read=lambda: b"x"))
+                    for n in STATE["upload"]]
+
+    fr.request = types.SimpleNamespace(files=_Files())
+
     class _DB:
         def get_value(self, dt, name=None, fields=None, **k):
             if dt == "Customer":
@@ -103,17 +127,6 @@ def _stub_frappe():
             if dt == "Address":
                 return _D(address_title="Co.opMart " + str(name), address_line1="1 Lê Lợi",
                           address_line2="", city="Hà Nội", county="", state="", phone="024")
-            if dt == "Driver":
-                if isinstance(name, dict):  # tra theo custom_user
-                    return STATE["driver"] if "custom_is_to_truong" not in name else None
-                return _D(full_name="Lái " + str(name), cell_number="09")
-            if dt == "Item":
-                it = ITEMS.get(name)
-                return _D(it) if it else None
-            if dt == "UOM Conversion Detail":
-                return UOM_CF.get((name["parent"], name["uom"]))
-            if dt == "Lo Thu Hoi":
-                return LO_LAI_XE.get(name)
             if dt == "File":
                 f = FILES.get(name)
                 return _D(f) if f else None
@@ -134,10 +147,13 @@ def _stub_frappe():
             return []
 
         def count(self, *a, **k):
-            return 0
+            return len(INSERTED)
 
         def set_value(self, *a, **k):
             pass
+
+        def delete(self, dt, filters=None):
+            DELETED.append((dt, filters))
 
         def has_column(self, *a, **k):
             return True
@@ -194,25 +210,19 @@ def main():
     sys.path.insert(0, REPO)
     lo_mod = importlib.import_module("vanchuyen.van_chuyen.doctype.lo_thu_hoi.lo_thu_hoi")
     api = importlib.import_module("vanchuyen.api.thu_hoi")
+    resp = sys.modules["frappe"].local.response
 
     print("=" * 78)
     print("thu_hoi_check — lô thu hồi: đúng khách, đúng điểm, không đổi gốc sau lưng kế toán")
     print("=" * 78)
 
-    ITEMS["BDX-170"] = {"item_name": "Bánh đậu xanh 170g", "stock_uom": "Hộp"}
-    UOM_CF[("BDX-170", "Thùng")] = 24.0
     ADDR_LINKS.add(("ADDR-HD", "COOP"))
 
     def lo(**kw):
         base = dict(name="TH-2026-0001", trang_thai="Tạo yêu cầu", customer="COOP",
-                    shipping_address_name="ADDR-HD", items=[], lai_xe=None, _new=False)
+                    shipping_address_name="ADDR-HD", _new=False)
         base.update(kw)
         return lo_mod.LoThuHoi(**base)
-
-    def row(**kw):
-        r = _D(item_code="BDX-170", qty=1, uom=None, idx=1)
-        r.update(kw)
-        return r
 
     # ── 1 ──────────────────────────────────────────────────────────────────
     print("-" * 78)
@@ -225,25 +235,23 @@ def main():
     d = lo(shipping_address_name="ADDR-BIGC")
     d.before_validate()
     check("điểm của khách KHÁC -> chặn", raises(d.validate) is not None)
+    d = lo(ma_van_don="  VTP123456  ")
+    d.before_validate()
+    check("mã vận đơn bỏ khoảng trắng hai đầu", d.ma_van_don == "VTP123456", repr(d.ma_van_don))
 
     # ── 2 ──────────────────────────────────────────────────────────────────
     print("-" * 78)
-    print("── 2. Hàng khai: quy đổi ĐVT, một mã một dòng ────────────────────────")
-    d = lo(items=[row(qty=2, uom="Thùng")])
-    d.before_validate()
-    check("2 thùng × 24 = 48 hộp (ĐVT kho)", d.items[0].stock_qty == 48.0 and d.tong_sl_khai == 48.0,
-          f"{d.items[0].stock_qty}")
-    check("hợp lệ -> qua", raises(d.validate) is None)
-    d = lo(items=[row(qty=2, uom="Lốc")])
-    d.before_validate()
-    check("ĐVT chưa khai quy đổi -> chặn, KHÔNG tự lấy hệ số 1", raises(d.validate) is not None
-          and d.items[0].stock_qty is None)
-    d = lo(items=[row(idx=1), row(idx=2, qty=3)])
-    d.before_validate()
-    check("hai dòng cùng mã -> chặn", raises(d.validate) is not None)
-    d = lo(items=[row(qty=0)])
-    d.before_validate()
-    check("số lượng 0 -> chặn", raises(d.validate) is not None)
+    print("── 2. Chi tiết hàng dán từ mail: giữ nguyên cột ───────────────────────")
+    # Bảng copy từ mail có ô đầu trống (cột STT bỏ trống) → dòng ĐẦU mở bằng tab: chính chỗ
+    # `.strip()` ăn mất, cả bảng lệch một cột.
+    dan = "\r\n\tMã hàng\tTên hàng\tSL\r\n  BDX-170\tBánh đậu xanh 170g\t48\r\n\tGhi chú dòng\t\r\n\r\n"
+    out = api._van_ban_dan(dan)
+    check("giữ tab + khoảng trắng đầu dòng, CRLF -> LF, bỏ dòng trống thừa hai đầu",
+          out == "\tMã hàng\tTên hàng\tSL\n  BDX-170\tBánh đậu xanh 170g\t48\n\tGhi chú dòng", repr(out))
+    check("chỉ khoảng trắng -> None (không lưu ô rỗng giả)", api._van_ban_dan(" \n\t\n ") is None)
+    src = open(os.path.join(REPO, "vanchuyen", "api", "thu_hoi.py"), encoding="utf-8").read()
+    check("save_lo dùng _van_ban_dan cho chi_tiet_hang (không .strip() như ô thường)",
+          re.search(r'elif f == "chi_tiet_hang":\s*\n\s*doc\.set\(f, _van_ban_dan\(v\)\)', src) is not None)
 
     # ── 3 ──────────────────────────────────────────────────────────────────
     print("-" * 78)
@@ -269,6 +277,11 @@ def main():
           (TABLES.add("Kiem Hang Thu Hoi"), KIEM.update({"TH-X": ""}),
            lo_mod.phieu_kiem(["TH-X"]))[-1] == {"TH-X": "Đang kiểm"})
     KIEM.clear()
+    TABLES.add("Lo Thu Hoi Hang")
+    DELETED.clear()
+    lo(name="TH-CU").on_trash()
+    check("xóa lô dọn luôn dòng hàng khai CŨ (không còn field cha, Frappe không tự xóa)",
+          DELETED == [("Lo Thu Hoi Hang", {"parent": "TH-CU", "parenttype": "Lo Thu Hoi"})], str(DELETED))
 
     # ── 4 ──────────────────────────────────────────────────────────────────
     print("-" * 78)
@@ -284,80 +297,85 @@ def main():
 
     # ── 5 ──────────────────────────────────────────────────────────────────
     print("-" * 78)
-    print("── 5. Lái xe chỉ lô của mình; proxy chỉ file của Lo Thu Hoi ────────────")
-    STATE["driver"] = "DRV-A"
-    LO_LAI_XE["TH-1"] = "DRV-B"
-    check("lô giao cho người khác -> PermissionError",
-          raises(lambda: api._require_lo_cua_toi("TH-1"), PermErr) is not None)
-    LO_LAI_XE["TH-1"] = "DRV-A"
-    check("lô của mình -> qua", raises(lambda: api._require_lo_cua_toi("TH-1"), PermErr) is None)
-    FILES["F-SI"] = {"attached_to_doctype": "Sales Invoice", "attached_to_name": "SI-1", "file_name": "x.pdf"}
-    check("proxy từ chối file gắn vào DocType khác",
-          raises(lambda: api.xem_dinh_kem("F-SI")) is not None)
-    FILES["F-LO"] = {"attached_to_doctype": "Lo Thu Hoi", "attached_to_name": "TH-9", "file_name": "p.pdf"}
-    LO_LAI_XE["TH-9"] = "DRV-B"
-    check("lái xe xem file của lô KHÔNG giao cho mình -> chặn",
+    print("── 5. File đính kèm: không thành lỗ script ────────────────────────────")
+    FILES["F-LO"] = {"attached_to_doctype": "Lo Thu Hoi", "attached_to_name": "TH-9", "file_name": "ds-hang.xlsx"}
+    STATE.update(roles=[], si_write=False)
+    check("proxy: guard ở dòng đầu — không quyền thì PermissionError",
           raises(lambda: api.xem_dinh_kem("F-LO"), PermErr) is not None)
+    STATE.update(si_write=True)
+    FILES["F-SI"] = {"attached_to_doctype": "Sales Invoice", "attached_to_name": "SI-1", "file_name": "x.pdf"}
+    check("proxy từ chối file gắn vào DocType khác", raises(lambda: api.xem_dinh_kem("F-SI")) is not None)
+
+    def kieu(ten):
+        FILES["F-LO"]["file_name"] = ten
+        resp.clear()
+        api.xem_dinh_kem("F-LO")
+        return resp.get("display_content_as")
+
+    check("PDF / ảnh mở trong tab (inline)", kieu("phieu.pdf") == "inline" and kieu("anh.JPG") == "inline")
+    check("Excel / Word TẢI VỀ (attachment)", kieu("ds-hang.xlsx") == "attachment" and kieu("bb.docx") == "attachment")
+    check("file cũ .html / .svg gắn bằng Desk vẫn TẢI VỀ, không bao giờ inline",
+          kieu("trang.html") == "attachment" and kieu("logo.svg") == "attachment")
+    INSERTED.clear()
+    STATE["upload"] = ["phieu.pdf", "danh-sach.XLSX", "bien-ban.docx", "mail.eml", "anh.heic"]
+    r = raises(lambda: api._nhan_file("TH-9"))
+    check("upload nhận PDF / Excel / Word / mail / ảnh", r is None and len(INSERTED) == 5, f"{r} · {INSERTED}")
+    INSERTED.clear()
+    STATE["upload"] = ["phieu.pdf", "xem-ngay.html"]
+    r = raises(lambda: api._nhan_file("TH-9"))
+    check("upload có file .html -> từ chối CẢ lượt, không lưu nửa vời",
+          r is not None and "xem-ngay.html" in r and INSERTED == [], f"{r} · {INSERTED}")
+    for bad in ("x.svg", "x.js", "x.exe", "khong-duoi"):
+        STATE["upload"] = [bad]
+        check(f"upload '{bad}' -> từ chối", raises(lambda: api._nhan_file("TH-9")) is not None)
+    js = open(os.path.join(PUB, "views", "thu-hoi-detail.js"), encoding="utf-8").read()
+
+    def bo_js(ten):
+        m = re.search(rf"const {ten} = new Set\(\[(.*?)\]\)", js, re.S)
+        return set(re.findall(r'"([a-z0-9]+)"', m.group(1))) if m else set()
+
+    check("màn hình lọc trước ĐÚNG danh sách đuôi server nhận (DUOI == DUOI_DINH_KEM)",
+          bo_js("DUOI") == set(api.DUOI_DINH_KEM), str(bo_js("DUOI") ^ set(api.DUOI_DINH_KEM)))
+    check("màn hình biết loại nào mở trong tab (XEM_TRONG_TAB == DUOI_XEM_TRONG_TAB)",
+          bo_js("XEM_TRONG_TAB") == set(api.DUOI_XEM_TRONG_TAB))
 
     # ── 6 ──────────────────────────────────────────────────────────────────
     print("-" * 78)
-    print("── 6. Field màn hình gửi đều nằm trong _UPDATABLE ─────────────────────")
-    js = open(os.path.join(PUB, "views", "thu-hoi-detail.js"), encoding="utf-8").read()
+    print("── 6. Field: màn hình gửi đủ, field cũ không sót ──────────────────────")
     m = re.search(r"function payload\(\) \{.*?\[(.*?)\]\.forEach", js, re.S)
     keys = re.findall(r'"([a-z_]+)"', m.group(1)) if m else []
     thieu = [k for k in keys if k not in api._UPDATABLE]
     check("tìm thấy danh sách field trong payload()", len(keys) >= 10, str(len(keys)))
     check("không field nào bị bỏ qua im lặng", not thieu, ", ".join(thieu))
+    moi = ("chi_tiet_hang", "don_vi_thu_hoi", "ma_van_don", "ngay_hen_lay")
+    check("payload + _UPDATABLE có đủ field mới (chi tiết hàng, đơn vị, vận đơn, ngày thu)",
+          all(k in keys and k in api._UPDATABLE for k in moi))
+    dt = json.load(open(os.path.join(REPO, "vanchuyen", "van_chuyen", "doctype", "lo_thu_hoi", "lo_thu_hoi.json"),
+                        encoding="utf-8"))
+    fields = {f["fieldname"]: f for f in dt["fields"]}
+    cu = ("lai_xe", "ten_lai_xe", "sdt_lai_xe", "xe", "chuyen_xe", "items", "tong_sl_khai")
+    # Màn hình: soát CÁCH DÙNG field ("items", F.items, D.xe, data-f="xe") — không soát chữ trần:
+    # "xe" là chữ thường trong câu tiếng Việt, "items" nằm trong class vc-items-center.
+    con = [k for k in cu if k in fields or k in api._UPDATABLE or k in api._LIST_COLS
+           or re.search(rf'["\']{k}["\']|\b[FDrp]\.{k}\b|data-f="{k}"', js)]
+    check("lái xe / xe / chuyến / bảng hàng khai không sót ở DocType, API, màn hình", not con, str(con))
+    check("đơn vị thu hồi: Select Viettel Post / Nhất Tín / Khác",
+          fields.get("don_vi_thu_hoi", {}).get("options", "").split("\n")[1:] == ["Viettel Post", "Nhất Tín", "Khác"])
+    check("chi_tiet_hang là Long Text (mail dài không bị cắt)",
+          fields.get("chi_tiet_hang", {}).get("fieldtype") == "Long Text")
+    check("field_order khớp danh sách field", dt.get("field_order") == [f["fieldname"] for f in dt["fields"]])
+    STATE.update(si_write=True)
+    lc = api.get_lua_chon()
+    check("get_lua_chon trả đơn vị thu hồi đọc từ meta, không còn lái xe / xe / chuyến",
+          lc.get("don_vi") == ["Viettel Post", "Nhất Tín", "Khác"] and not ({"drivers", "vehicles", "trips"} & set(lc)),
+          str(sorted(lc)))
+    chuyen = open(os.path.join(PUB, "views", "chuyen.js"), encoding="utf-8").read()
+    check("màn lái xe #/chuyen không còn gọi API thu hồi; API không còn method lái xe",
+          "thu_hoi" not in chuyen and not any(hasattr(api, f) for f in ("cua_toi", "lai_xe_da_lay", "lai_xe_upload")))
 
     # ── 7 ──────────────────────────────────────────────────────────────────
     print("-" * 78)
-    print("── 7. Ô chọn xe cùng luật 'được xếp chuyến' với Xếp chuyến ────────────")
-    fr = sys.modules["frappe"]
-
-    class _Meta:
-        def __init__(self, fields):
-            self.f = set(fields)
-
-        def has_field(self, f):
-            return f in self.f
-
-        def get_field(self, f):
-            return _D(options="Hàng date / cận date\nHàng lỗi")
-
-    XE = [_D(name="29C-1", make="Hino", model="", custom_loai_xe="Xe tải", custom_ngung_su_dung=0),
-          _D(name="30A-2", make="Toyota", model="Vios", custom_loai_xe="Xe con", custom_ngung_su_dung=0),
-          _D(name="29C-3", make="Isuzu", model="", custom_loai_xe="Xe tải", custom_ngung_su_dung=1),
-          _D(name="29C-4", make="Kia", model="", custom_loai_xe=None, custom_ngung_su_dung=None)]
-    xin = {}
-
-    def _get_all(dt, fields=None, **k):
-        if dt != "Vehicle":
-            return []
-        xin["Vehicle"] = list(fields or [])
-        return [_D({f: v.get(f) for f in fields if f in v}) for v in XE]  # chỉ trả field ĐÃ xin
-
-    def _meta(co_truong):
-        return lambda dt: _Meta({"status"} if dt == "Driver" else co_truong if dt == "Vehicle" else {"ly_do"})
-
-    fr.get_all = _get_all
-    STATE.update(driver=None, roles=["System Manager"], si_write=True)
-    fr.get_meta = _meta({"custom_loai_xe", "custom_ngung_su_dung"})
-    ds = [v["name"] for v in api.get_lua_chon()["vehicles"]]
-    check("chỉ xe tải CÒN dùng; xe con / xe ngừng ẩn; xe cũ chưa có loại = xe tải",
-          ds == ["29C-1", "29C-4"], str(ds))
-    fr.get_meta = _meta(set())
-    ds = [v["name"] for v in api.get_lua_chon()["vehicles"]]
-    check("chạy trước migrate: không xin field chưa có, mọi xe hiện như cũ",
-          "custom_loai_xe" not in xin["Vehicle"] and ds == ["29C-1", "30A-2", "29C-3", "29C-4"],
-          f"{xin['Vehicle']} -> {ds}")
-    fr.get_all = lambda *a, **k: []
-    for f in ("xe", "lai_xe", "chuyen_xe"):
-        check(f"ô chọn {f}: giá trị đang gắn mà danh sách đã lọc bỏ vẫn hiện (giuGiaTri)",
-              f'sel("{f}", ' in js and re.search(rf'sel\("{f}", "[^"]+", giuGiaTri\("{f}", ', js) is not None)
-
-    # ── 8 ──────────────────────────────────────────────────────────────────
-    print("-" * 78)
-    print("── 8. Vỏ portal: import map đủ module dùng chung, BUILD khớp ──────────")
+    print("── 7. Vỏ portal: import map đủ module dùng chung, BUILD khớp ──────────")
     html = open(os.path.join(REPO, "vanchuyen", "www", "vc.html"), encoding="utf-8").read()
     for sub in ("lib", "components"):
         for fn in sorted(os.listdir(os.path.join(PUB, sub))):

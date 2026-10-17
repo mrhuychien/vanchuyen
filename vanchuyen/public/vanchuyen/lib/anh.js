@@ -1,6 +1,6 @@
 // Nén ảnh TRƯỚC khi upload: canvas max `maxDim` px + JPEG chất lượng `quality`.
 // Lái xe ở vùng sóng yếu — ảnh 12MP gốc 4–6MB gửi không nổi, bản 1200px ~200KB thì được.
-// Dùng chung: chứng từ giao hàng (chuyen-detail) + chứng từ lấy hàng thu hồi.
+// Dùng chung: chứng từ giao hàng (chuyen-detail) + đính kèm lô thu hồi (thu-hoi-detail).
 
 export function resizeImage(file, maxDim = 1200, quality = 0.8) {
 	return new Promise((resolve, reject) => {
@@ -26,7 +26,7 @@ export function resizeImage(file, maxDim = 1200, quality = 0.8) {
 	});
 }
 
-// Ảnh thì nén; PDF / file khác gửi nguyên (phiếu xuất trả siêu thị thường là PDF).
+// Ảnh thì nén; PDF / Excel / Word / mail… gửi nguyên (phiếu xuất trả siêu thị thường là PDF).
 export async function chuanBiFile(file) {
 	if (!file || !/^image\//.test(file.type || "")) return file;
 	try {

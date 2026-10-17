@@ -12,6 +12,7 @@
   "ngay_yeu_cau",
   "so_phieu_sieu_thi",
   "ly_do",
+  "gia_tri_khai",
   "col_break_head",
   "customer",
   "customer_name",
@@ -25,14 +26,14 @@
   "sdt_lien_he",
   "col_break_lien_he",
   "ghi_chu",
+  "sec_chi_tiet",
+  "chi_tiet_hang",
+  "so_dinh_kem",
   "sec_dieu_phoi",
-  "ngay_hen_lay",
-  "lai_xe",
-  "ten_lai_xe",
-  "sdt_lai_xe",
+  "don_vi_thu_hoi",
+  "ma_van_don",
   "col_break_dieu_phoi",
-  "xe",
-  "chuyen_xe",
+  "ngay_hen_lay",
   "so_kien_du_kien",
   "sec_tien_do",
   "lay_luc",
@@ -40,13 +41,7 @@
   "col_break_tien_do",
   "nhan_luc",
   "nhan_boi",
-  "so_kien_nhan",
-  "sec_hang",
-  "items",
-  "tong_sl_khai",
-  "col_break_hang",
-  "gia_tri_khai",
-  "so_dinh_kem"
+  "so_kien_nhan"
  ],
  "fields": [
   {
@@ -90,6 +85,11 @@
    "fieldtype": "Select",
    "label": "Lý do trả",
    "options": "\nHàng date / cận date\nHàng thời vụ\nHàng lỗi, hư hỏng\nĐổi hàng\nKhác"
+  },
+  {
+   "fieldname": "gia_tri_khai",
+   "fieldtype": "Currency",
+   "label": "Giá trị theo phiếu siêu thị"
   },
   {
    "fieldname": "col_break_head",
@@ -167,55 +167,57 @@
    "label": "Ghi chú"
   },
   {
+   "fieldname": "sec_chi_tiet",
+   "fieldtype": "Section Break",
+   "label": "Chi tiết hàng cần thu"
+  },
+  {
+   "description": "Siêu thị hay gửi danh sách hàng cần thu qua mail — dán NGUYÊN VĂN vào đây. Mã hàng / số lượng chính xác do kế toán ghi ở phiếu kiểm hàng.",
+   "fieldname": "chi_tiet_hang",
+   "fieldtype": "Long Text",
+   "label": "Chi tiết hàng (dán từ mail / phiếu siêu thị)"
+  },
+  {
+   "default": "0",
+   "fieldname": "so_dinh_kem",
+   "fieldtype": "Int",
+   "label": "Số file đính kèm",
+   "read_only": 1
+  },
+  {
    "fieldname": "sec_dieu_phoi",
    "fieldtype": "Section Break",
-   "label": "Điều phối lấy hàng"
+   "label": "Điều phối thu hồi"
   },
   {
-   "fieldname": "ngay_hen_lay",
-   "fieldtype": "Date",
-   "label": "Ngày hẹn lấy"
-  },
-  {
-   "fieldname": "lai_xe",
-   "fieldtype": "Link",
+   "description": "Đơn vị vận chuyển vào siêu thị lấy hàng trả. 'Khác' thì ghi rõ ở Ghi chú.",
+   "fieldname": "don_vi_thu_hoi",
+   "fieldtype": "Select",
    "in_standard_filter": 1,
-   "label": "Lái xe",
-   "options": "Driver"
+   "label": "Đơn vị thu hồi",
+   "options": "\nViettel Post\nNhất Tín\nKhác"
   },
   {
-   "fieldname": "ten_lai_xe",
+   "description": "Nếu có — mã vận đơn của đơn vị thu hồi, để tra hành trình và đối chiếu cước.",
+   "fieldname": "ma_van_don",
    "fieldtype": "Data",
-   "label": "Tên lái xe",
-   "read_only": 1
-  },
-  {
-   "fieldname": "sdt_lai_xe",
-   "fieldtype": "Data",
-   "label": "SĐT lái xe",
-   "read_only": 1
+   "in_standard_filter": 1,
+   "label": "Mã vận đơn"
   },
   {
    "fieldname": "col_break_dieu_phoi",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "xe",
-   "fieldtype": "Link",
-   "label": "Xe",
-   "options": "Vehicle"
-  },
-  {
-   "description": "Tùy chọn: xe đi giao rồi ghé lấy hàng trả trên đường về.",
-   "fieldname": "chuyen_xe",
-   "fieldtype": "Link",
-   "label": "Đi kèm chuyến",
-   "options": "Chuyen Xe"
+   "description": "Ngày đơn vị vận chuyển (Viettel Post / Nhất Tín) vào lấy hàng ở siêu thị — hẹn hoặc thực tế.",
+   "fieldname": "ngay_hen_lay",
+   "fieldtype": "Date",
+   "label": "Ngày thu"
   },
   {
    "fieldname": "so_kien_du_kien",
    "fieldtype": "Float",
-   "label": "Số kiện dự kiến"
+   "label": "Số kiện (theo vận đơn)"
   },
   {
    "fieldname": "sec_tien_do",
@@ -251,50 +253,16 @@
    "read_only": 1
   },
   {
-   "description": "Đếm lúc hàng xuống xe. Lệch với số kiện dự kiến thì hỏi lái xe NGAY, đừng để kế toán kiểm hàng mới thấy.",
+   "description": "Đếm lúc hàng về tới công ty. Lệch với số kiện trên vận đơn thì báo đơn vị vận chuyển NGAY, đừng để kế toán kiểm hàng mới thấy.",
    "fieldname": "so_kien_nhan",
    "fieldtype": "Float",
    "label": "Số kiện thực nhận"
-  },
-  {
-   "fieldname": "sec_hang",
-   "fieldtype": "Section Break",
-   "label": "Hàng siêu thị khai trả"
-  },
-  {
-   "description": "Theo phiếu xuất trả của siêu thị — số KHAI, không phải số đếm. Kế toán kiểm hàng đếm riêng rồi mới so.",
-   "fieldname": "items",
-   "fieldtype": "Table",
-   "label": "Mã hàng siêu thị khai",
-   "options": "Lo Thu Hoi Hang"
-  },
-  {
-   "fieldname": "tong_sl_khai",
-   "fieldtype": "Float",
-   "label": "Tổng SL khai (ĐVT kho)",
-   "read_only": 1
-  },
-  {
-   "fieldname": "col_break_hang",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "gia_tri_khai",
-   "fieldtype": "Currency",
-   "label": "Giá trị theo phiếu siêu thị"
-  },
-  {
-   "default": "0",
-   "fieldname": "so_dinh_kem",
-   "fieldtype": "Int",
-   "label": "Số file đính kèm",
-   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "is_submittable": 0,
  "links": [],
- "modified": "2026-10-17 09:00:00",
+ "modified": "2026-10-17 10:00:00",
  "module": "Van Chuyen",
  "name": "Lo Thu Hoi",
  "naming_rule": "By \"Naming Series\" field",
