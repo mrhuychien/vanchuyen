@@ -36,6 +36,7 @@ from vanchuyen.van_chuyen.doctype.lo_thu_hoi.lo_thu_hoi import (
 	he_so_quy_doi,
 	phieu_kiem,
 )
+from vanchuyen.van_chuyen.doctype.nhat_ky_xe import nhat_ky_xe as nk
 
 DT = "Lo Thu Hoi"
 XONG = CHANG[-1]
@@ -241,13 +242,23 @@ def get_lua_chon():
 	if frappe.get_meta("Driver").has_field("status"):
 		driver_filters["status"] = ["!=", "Left"]
 	ly_do = [o for o in cstr(frappe.get_meta(DT).get_field("ly_do").options).split("\n") if o]
+	# Xe: cùng khái niệm "được xếp chuyến" của Xếp chuyến (`nhat_ky_xe.xep_chuyen_duoc` —
+	# xe tải còn sử dụng). Lọc cho đỡ rối, không phải luật chặn: xe đang gắn trên lô vẫn
+	# hiện ở ô chọn (client giữ giá trị). Chỉ xin field meta đang có — chạy trước migrate
+	# thì thiếu field = xe tải còn dùng, hành vi cũ.
+	meta_xe = frappe.get_meta("Vehicle")
+	f_xe = ["name", "make", "model"] + [f for f in ("custom_loai_xe", "custom_ngung_su_dung") if meta_xe.has_field(f)]
+	vehicles = [
+		{"name": v.name, "make": v.make, "model": v.model}
+		for v in frappe.get_all("Vehicle", fields=f_xe, order_by="name asc", limit_page_length=0)
+		if nk.xep_chuyen_duoc(v)
+	]
 	return {
 		"drivers": frappe.get_all(
 			"Driver", filters=driver_filters, fields=["name", "full_name", "cell_number"],
 			order_by="full_name asc", limit_page_length=0,
 		),
-		"vehicles": frappe.get_all("Vehicle", fields=["name", "make", "model"], order_by="name asc",
-			limit_page_length=0),
+		"vehicles": vehicles,
 		"trips": frappe.get_all(
 			"Chuyen Xe",
 			filters={"docstatus": ["<", 2], "trang_thai": ["!=", "Hoàn thành"]},

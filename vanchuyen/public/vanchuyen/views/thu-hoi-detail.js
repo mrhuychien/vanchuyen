@@ -95,9 +95,9 @@ function draw() {
 			<div class="vc-section-title">Điều phối lấy hàng</div>
 			<div class="vc-th-grid">
 				${inp("ngay_hen_lay", "Ngày hẹn lấy", "date")}
-				${sel("lai_xe", "Lái xe", [["", "— chưa giao —"]].concat((OPT.drivers || []).map((d) => [d.name, `${d.full_name || d.name}${d.cell_number ? " · " + d.cell_number : ""}`])))}
-				${sel("xe", "Xe", [["", "— chọn xe —"]].concat((OPT.vehicles || []).map((v) => [v.name, [v.name, v.make, v.model].filter(Boolean).join(" · ")])))}
-				${sel("chuyen_xe", "Đi kèm chuyến (tùy chọn)", [["", "— không —"]].concat((OPT.trips || []).map((t) => [t.name, `${t.name} · ${formatDate(t.ngay_giao)} · ${t.ten_lai_xe || ""}`])))}
+				${sel("lai_xe", "Lái xe", giuGiaTri("lai_xe", [["", "— chưa giao —"]].concat((OPT.drivers || []).map((d) => [d.name, `${d.full_name || d.name}${d.cell_number ? " · " + d.cell_number : ""}`]))))}
+				${sel("xe", "Xe", giuGiaTri("xe", [["", "— chọn xe —"]].concat((OPT.vehicles || []).map((v) => [v.name, [v.name, v.make, v.model].filter(Boolean).join(" · ")]))))}
+				${sel("chuyen_xe", "Đi kèm chuyến (tùy chọn)", giuGiaTri("chuyen_xe", [["", "— không —"]].concat((OPT.trips || []).map((t) => [t.name, `${t.name} · ${formatDate(t.ngay_giao)} · ${t.ten_lai_xe || ""}`]))))}
 				${inp("so_kien_du_kien", "Số kiện dự kiến", "number")}
 				${D ? inp("so_kien_nhan", "Số kiện thực nhận", "number") : ""}
 			</div>
@@ -160,6 +160,13 @@ function inp(f, label, type = "text") {
 	const extra = type === "number" ? ' inputmode="decimal" step="any" min="0"' : "";
 	return `<div class="vc-field"><label>${escapeHtml(label)}</label>
 		<input class="vc-input" data-f="${f}" type="${type}" value="${escapeHtml(v)}"${extra} /></div>`;
+}
+
+// Giá trị đang gắn trên lô mà danh sách chọn đã lọc bỏ (xe ngừng dùng / xe con, lái xe
+// đã nghỉ, chuyến đã xong): vẫn hiện đúng nó — ô chọn không được trông như "chưa chọn".
+function giuGiaTri(f, opts) {
+	const v = F[f];
+	return !v || opts.some(([x]) => String(x) === String(v)) ? opts : opts.concat([[v, `${v} (đã ẩn khỏi danh sách)`]]);
 }
 
 function sel(f, label, opts) {

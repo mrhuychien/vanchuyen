@@ -3,7 +3,7 @@
 """thu_hoi_check — LÔ THU HỒI: đúng khách, đúng điểm, và không đổi gốc sau lưng kế toán.
 
 ════════════════════════════════════════════════════════════════════════════
-NĂM CÁI LỖ MÀ BỘ KIỂM NÀY CANH
+SÁU CÁI LỖ MÀ BỘ KIỂM NÀY CANH
 ════════════════════════════════════════════════════════════════════════════
 
 1. **Điểm lấy hàng của khách khác.** Saigon Co.op chỉ có MỘT Customer cho mọi
@@ -17,6 +17,9 @@ NĂM CÁI LỖ MÀ BỘ KIỂM NÀY CANH
 4. **Dòng thời gian thủng.** Nhảy cóc "Tạo yêu cầu → Đã nhận hàng" phải đóng dấu
    cả mốc lấy hàng; lùi chặng phải xóa dấu của chặng bỏ.
 5. **Lái xe đụng lô của người khác / file của DocType khác qua proxy.**
+6. **Ô chọn xe lệch luật Xếp chuyến.** Xe đã bán / nằm gara / xe con phải ẩn như ở
+   Xếp chuyến (`nhat_ky_xe.xep_chuyen_duoc`), chạy trước migrate không được nổ
+   `Unknown column`, và giá trị đang gắn trên lô vẫn phải hiện ở ô chọn.
 
 Kèm hai luật vỏ portal: mọi module trong lib/ + components/ có trong import map
 (Luật vàng #1 frappe-portal-spa), và BUILD của shell khớp SHELL_BUILD của server.
@@ -308,7 +311,53 @@ def main():
 
     # ── 7 ──────────────────────────────────────────────────────────────────
     print("-" * 78)
-    print("── 7. Vỏ portal: import map đủ module dùng chung, BUILD khớp ──────────")
+    print("── 7. Ô chọn xe cùng luật 'được xếp chuyến' với Xếp chuyến ────────────")
+    fr = sys.modules["frappe"]
+
+    class _Meta:
+        def __init__(self, fields):
+            self.f = set(fields)
+
+        def has_field(self, f):
+            return f in self.f
+
+        def get_field(self, f):
+            return _D(options="Hàng date / cận date\nHàng lỗi")
+
+    XE = [_D(name="29C-1", make="Hino", model="", custom_loai_xe="Xe tải", custom_ngung_su_dung=0),
+          _D(name="30A-2", make="Toyota", model="Vios", custom_loai_xe="Xe con", custom_ngung_su_dung=0),
+          _D(name="29C-3", make="Isuzu", model="", custom_loai_xe="Xe tải", custom_ngung_su_dung=1),
+          _D(name="29C-4", make="Kia", model="", custom_loai_xe=None, custom_ngung_su_dung=None)]
+    xin = {}
+
+    def _get_all(dt, fields=None, **k):
+        if dt != "Vehicle":
+            return []
+        xin["Vehicle"] = list(fields or [])
+        return [_D({f: v.get(f) for f in fields if f in v}) for v in XE]  # chỉ trả field ĐÃ xin
+
+    def _meta(co_truong):
+        return lambda dt: _Meta({"status"} if dt == "Driver" else co_truong if dt == "Vehicle" else {"ly_do"})
+
+    fr.get_all = _get_all
+    STATE.update(driver=None, roles=["System Manager"], si_write=True)
+    fr.get_meta = _meta({"custom_loai_xe", "custom_ngung_su_dung"})
+    ds = [v["name"] for v in api.get_lua_chon()["vehicles"]]
+    check("chỉ xe tải CÒN dùng; xe con / xe ngừng ẩn; xe cũ chưa có loại = xe tải",
+          ds == ["29C-1", "29C-4"], str(ds))
+    fr.get_meta = _meta(set())
+    ds = [v["name"] for v in api.get_lua_chon()["vehicles"]]
+    check("chạy trước migrate: không xin field chưa có, mọi xe hiện như cũ",
+          "custom_loai_xe" not in xin["Vehicle"] and ds == ["29C-1", "30A-2", "29C-3", "29C-4"],
+          f"{xin['Vehicle']} -> {ds}")
+    fr.get_all = lambda *a, **k: []
+    for f in ("xe", "lai_xe", "chuyen_xe"):
+        check(f"ô chọn {f}: giá trị đang gắn mà danh sách đã lọc bỏ vẫn hiện (giuGiaTri)",
+              f'sel("{f}", ' in js and re.search(rf'sel\("{f}", "[^"]+", giuGiaTri\("{f}", ', js) is not None)
+
+    # ── 8 ──────────────────────────────────────────────────────────────────
+    print("-" * 78)
+    print("── 8. Vỏ portal: import map đủ module dùng chung, BUILD khớp ──────────")
     html = open(os.path.join(REPO, "vanchuyen", "www", "vc.html"), encoding="utf-8").read()
     for sub in ("lib", "components"):
         for fn in sorted(os.listdir(os.path.join(PUB, sub))):
