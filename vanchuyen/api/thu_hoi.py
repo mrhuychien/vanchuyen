@@ -5,6 +5,7 @@ NGOÀI vào lấy (Viettel Post / Nhất Tín) — lô giữ đơn vị, mã v�
 tiết hàng là bản dán nguyên văn từ mail siêu thị. App này giữ ba chặng đầu (Tạo yêu cầu →
 Đã lấy hàng → Đã nhận hàng); kế toán tiếp nối bằng phiếu kiểm hàng bên ketoan (mã + số
 lượng chính xác ở đó), và mọi danh sách ở đây hiện TRẠNG THÁI TỔNG bằng cách đọc mềm phiếu.
+Hủy yêu cầu (`huy_lo`) giữ lô ở "Đã hủy" kèm lý do — không xóa; `khoi_phuc_lo` khi hủy nhầm.
 
 Quyền: DocType chỉ cấp System Manager (như `Su Co Van Chuyen`). Mọi method gọi `_require()`
 ở dòng đầu — điều hành (quyền ghi Sales Invoice), tổ trưởng, quản trị — rồi mới
@@ -28,6 +29,7 @@ from vanchuyen.api.guards import is_admin, is_to_truong
 from vanchuyen.api.nhap_don import _ten_key
 from vanchuyen.van_chuyen.doctype.lo_thu_hoi.lo_thu_hoi import (
 	CHANG,
+	DA_HUY,
 	DANG_KIEM,
 	KIEM_DT,
 	TAO,
@@ -54,9 +56,12 @@ _LIST_COLS = (
 	"name", "trang_thai", "ngay_yeu_cau", "so_phieu_sieu_thi", "ly_do",
 	"customer", "customer_name", "shipping_address_name", "ten_diem", "ma_diem", "dia_chi",
 	"don_vi_thu_hoi", "ma_van_don", "ngay_hen_lay", "lay_luc", "nhan_luc",
-	"so_kien_du_kien", "so_kien_nhan", "so_dinh_kem",
+	"so_kien_du_kien", "so_kien_nhan", "so_dinh_kem", "ly_do_huy", "huy_luc", "huy_boi",
 )
-_DATE_COLS = ("ngay_yeu_cau", "ngay_hen_lay", "lay_luc", "nhan_luc")
+_DATE_COLS = ("ngay_yeu_cau", "ngay_hen_lay", "lay_luc", "nhan_luc", "huy_luc")
+# Thứ tự xếp danh sách: 7 chặng rồi tới lô ĐÃ HỦY ở CUỐI — FIELD() trả 0 cho giá trị không
+# có trong danh sách, tức là xếp lên ĐẦU; quên "Đã hủy" ở đây là lô hủy nổi lên trên cùng.
+_THU_TU = CHANG + (DA_HUY,)
 
 # Đính kèm: ảnh, PDF, bảng tính, văn bản, mail, file nén. KHÔNG nhận loại trình duyệt chạy
 # được script (html / svg / xml / js…) — proxy `xem_dinh_kem` phục vụ file trên CHÍNH tên miền
@@ -120,7 +125,8 @@ def _join_kiem():
 def list_lo(chang=None, tim=None, tu_ngay=None, den_ngay=None, page=1, page_size=30):
 	"""Danh sách lô, lọc theo CHẶNG TỔNG (7 chặng) + tìm khách/điểm/số phiếu/vận đơn.
 
-	`chang` = một trong 7 chặng · "dang_mo" (mặc định: chưa Xong) · "tat_ca".
+	`chang` = một trong 7 chặng · "Đã hủy" · "dang_mo" (mặc định: chưa Xong, chưa hủy) ·
+	"tat_ca".
 	Lọc ở SERVER, đếm pill trên CÙNG bộ tìm/ngày — bài học của `su_co.list_issues`: lọc
 	client trên một trang 30 dòng là cách chắc chắn nhất để giấu mất lô cũ nhất.
 
@@ -131,7 +137,7 @@ def list_lo(chang=None, tim=None, tu_ngay=None, den_ngay=None, page=1, page_size
 	page = cint(page) or 1
 	page_size = min(cint(page_size) or 30, 100)
 	join, expr = _join_kiem()
-	p = {"dang_kiem": DANG_KIEM, "xong": XONG}
+	p = {"dang_kiem": DANG_KIEM, "xong": XONG, "huy": DA_HUY}
 	conds = ["1 = 1"]
 	if cstr(tim).strip():
 		p["q"] = "%" + cstr(tim).strip() + "%"
@@ -160,15 +166,15 @@ def list_lo(chang=None, tim=None, tu_ngay=None, den_ngay=None, page=1, page_size
 	where = base
 	chang = cstr(chang).strip() or "dang_mo"
 	if chang == "dang_mo":
-		where += f" AND {expr} != %(xong)s"
-	elif chang in CHANG:
+		where += f" AND {expr} NOT IN (%(xong)s, %(huy)s)"
+	elif chang in _THU_TU:
 		p["chang"] = chang
 		where += f" AND {expr} = %(chang)s"
 
 	total = cint(frappe.db.sql(f"SELECT COUNT(*) FROM `tab{DT}` l {join} WHERE {where}", p)[0][0])
 	p["lim"], p["off"] = page_size, (page - 1) * page_size
-	order = ", ".join(["%(c{0})s".format(i) for i in range(len(CHANG))])
-	p.update({"c%d" % i: c for i, c in enumerate(CHANG)})
+	order = ", ".join(["%(c{0})s".format(i) for i in range(len(_THU_TU))])
+	p.update({"c%d" % i: c for i, c in enumerate(_THU_TU)})
 	cols = ", ".join("l.`%s`" % c for c in _LIST_COLS)
 	rows = frappe.db.sql(
 		f"""SELECT {cols}, {expr} AS chang
@@ -182,7 +188,7 @@ def list_lo(chang=None, tim=None, tu_ngay=None, den_ngay=None, page=1, page_size
 	today = nowdate()
 	for r in rows:
 		# Tuổi tính từ NGÀY YÊU CẦU — ngày siêu thị gọi, không phải ngày nhập phiếu.
-		r["tuoi"] = date_diff(today, r.ngay_yeu_cau) if r.ngay_yeu_cau and r.chang != XONG else None
+		r["tuoi"] = date_diff(today, r.ngay_yeu_cau) if r.ngay_yeu_cau and r.chang not in (XONG, DA_HUY) else None
 		_str_dates(r)
 	return {
 		"rows": rows,
@@ -214,7 +220,7 @@ def _files(name):
 
 def _lo_dict(name):
 	doc = frappe.get_doc(DT, name)
-	d = {f: doc.get(f) for f in _LIST_COLS + _UPDATABLE + ("customer_name", "sdt_diem", "lay_boi", "nhan_boi")}
+	d = {f: doc.get(f) for f in _LIST_COLS + _UPDATABLE + ("customer_name", "sdt_diem", "lay_boi", "nhan_boi", "huy_tu")}
 	d["name"] = doc.name
 	_str_dates(d)
 	d["files"] = _files(doc.name)
@@ -352,6 +358,13 @@ def _dat_chang(doc, moi, so_kien_nhan=None):
 	doc.trang_thai = moi
 
 
+def _chan_lo_huy(doc):
+	"""Lô đã hủy chỉ xem: không sửa, không chuyển chặng. File đính kèm vẫn thêm được (mail hủy
+	của siêu thị đến sau là chuyện thường) — `upload_dinh_kem` không gọi hàm này."""
+	if doc.trang_thai == DA_HUY:
+		frappe.throw(_("Lô {0} đã hủy — chỉ xem. Hủy nhầm thì bấm 'Khôi phục' trước.").format(doc.name))
+
+
 @frappe.whitelist()
 def save_lo(payload, name=None):
 	"""Tạo / sửa lô. Chỉ field trong `_UPDATABLE`; tên khách / điểm / địa chỉ do controller
@@ -366,6 +379,7 @@ def save_lo(payload, name=None):
 		if not frappe.db.exists(DT, name):
 			frappe.throw(_("Không tìm thấy lô thu hồi {0}.").format(name))
 		doc = frappe.get_doc(DT, name)
+		_chan_lo_huy(doc)
 	else:
 		doc = frappe.new_doc(DT)
 		doc.trang_thai = TAO
@@ -391,6 +405,7 @@ def chuyen_chang(name, trang_thai, so_kien_nhan=None):
 	"""Điều phối / điều hành chuyển chặng vận chuyển (tiến hoặc lùi)."""
 	_require()
 	doc = frappe.get_doc(DT, name)
+	_chan_lo_huy(doc)
 	_dat_chang(doc, trang_thai, so_kien_nhan)
 	doc.save(ignore_permissions=True)
 	return _lo_dict(doc.name)
@@ -403,6 +418,11 @@ def xoa_lo(name):
 	trang_thai = frappe.db.get_value(DT, name, "trang_thai")
 	if trang_thai is None:
 		frappe.throw(_("Không tìm thấy lô thu hồi {0}.").format(name))
+	if trang_thai == DA_HUY:
+		frappe.throw(
+			_("Lô {0} đã hủy — giữ lại làm dấu vết, không xóa. Lập nhầm thật thì Khôi phục rồi xóa "
+			  "(khi lô còn 'Tạo yêu cầu').").format(name)
+		)
 	if trang_thai != TAO:
 		frappe.throw(
 			_("Lô {0} đã ở chặng '{1}'. Chỉ xóa được lô còn 'Tạo yêu cầu' — lùi chặng trước nếu "
@@ -411,6 +431,72 @@ def xoa_lo(name):
 	# on_trash chặn tiếp khi kế toán đã mở phiếu kiểm. File đính kèm Frappe tự xóa theo.
 	frappe.delete_doc(DT, name, ignore_permissions=True)
 	return {"deleted": name}
+
+
+# ── Hủy yêu cầu · Khôi phục ─────────────────────────────────────────────────
+def _co_phieu_kiem_khoa(name):
+	"""Lô đã có phiếu kiểm bên ketoan chưa — đọc KHÓA (`FOR UPDATE`).
+
+	Đọc khóa luôn thấy bản mới nhất ĐÃ COMMIT (đọc thường có thể thấy ảnh chụp cũ của giao
+	dịch) và giữ khóa tới hết giao dịch. Cùng khóa hàng lô ở cả hai bên (`huy_lo` ở đây,
+	`bat_dau_kiem` bên ketoan): kế toán bấm "Bắt đầu kiểm" đúng lúc điều phối bấm "Hủy" thì
+	một bên chờ bên kia xong rồi thấy kết quả — không có lô vừa hủy vừa đang kiểm.
+	SQL thô: bảng của app khác, không có meta khi app đó vắng mặt.
+	"""
+	if not frappe.db.table_exists(KIEM_DT):
+		return False
+	return bool(
+		frappe.db.sql(f"SELECT name FROM `tab{KIEM_DT}` WHERE lo_thu_hoi = %(n)s FOR UPDATE", {"n": name})
+	)
+
+
+@frappe.whitelist()
+def huy_lo(name, ly_do=None):
+	"""Hủy yêu cầu xuất trả — GIỮ lô làm dấu vết (khác `xoa_lo`).
+
+	Siêu thị rút yêu cầu, lập trùng, đơn vị vận chuyển không lấy được hàng… Lô sang "Đã hủy"
+	kèm lý do + ai / lúc nào + chặng trước khi hủy (`huy_tu`) để Khôi phục về đúng chỗ. Chỉ
+	khi kế toán CHƯA mở phiếu kiểm — controller chặn thêm một lần (kể cả sửa trên Desk).
+	"""
+	_require()
+	ly_do = cstr(ly_do).strip()
+	if len(ly_do) < 5:
+		frappe.throw(_("Ghi rõ lý do hủy (ít nhất 5 ký tự) — lô hủy được giữ lại làm dấu vết."))
+	if not frappe.db.exists(DT, name):
+		frappe.throw(_("Không tìm thấy lô thu hồi {0}.").format(name))
+	doc = frappe.get_doc(DT, name, for_update=True)
+	if doc.trang_thai == DA_HUY:
+		frappe.throw(_("Lô {0} đã hủy rồi.").format(name))
+	if _co_phieu_kiem_khoa(name):
+		frappe.throw(
+			_(
+				"Kế toán đã mở phiếu kiểm hàng cho lô {0} — không hủy từ đây được. Nhờ kế toán xóa "
+				"phiếu kiểm trước (phiếu chưa chốt, chưa có hóa đơn trả về), hoặc Kế toán trưởng "
+				"kết luận 'không lập hóa đơn trả về'."
+			).format(name)
+		)
+	doc.huy_tu = doc.trang_thai
+	doc.trang_thai = DA_HUY
+	doc.ly_do_huy = ly_do
+	doc.huy_boi = frappe.utils.get_fullname(frappe.session.user) or frappe.session.user
+	doc.huy_luc = now_datetime()
+	doc.save(ignore_permissions=True)
+	return _lo_dict(doc.name)
+
+
+@frappe.whitelist()
+def khoi_phuc_lo(name):
+	"""Hủy nhầm → đưa lô về ĐÚNG chặng trước khi hủy. Dấu hủy trên bản ghi do controller xóa
+	khi lô rời "Đã hủy"; dấu cũ vẫn còn trong lịch sử thay đổi (Version) của lô."""
+	_require()
+	if not frappe.db.exists(DT, name):
+		frappe.throw(_("Không tìm thấy lô thu hồi {0}.").format(name))
+	doc = frappe.get_doc(DT, name, for_update=True)
+	if doc.trang_thai != DA_HUY:
+		frappe.throw(_("Lô {0} không ở trạng thái 'Đã hủy'.").format(name))
+	doc.trang_thai = doc.huy_tu if doc.huy_tu in TRANG_THAI else TAO
+	doc.save(ignore_permissions=True)
+	return _lo_dict(doc.name)
 
 
 # ── File đính kèm ───────────────────────────────────────────────────────────

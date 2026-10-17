@@ -1706,6 +1706,46 @@
 	font-size: 0.82rem;
 	font-weight: 600;
 }
+/* Hủy yêu cầu: khung đỏ nhạt (lúc nào · ai · lý do) + dòng gọn trên thẻ danh sách. */
+.vc-th-huy-box {
+	padding: 0.6rem 0.75rem;
+	border-radius: var(--vc-radius-sm);
+	background: #fef2f2;
+	border: 1px solid #fecaca;
+	color: #991b1b;
+	font-size: 0.85rem;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.vc-th-huy {
+	margin-top: 0.35rem;
+	font-size: 0.8rem;
+	font-weight: 600;
+	color: #b91c1c;
+}
+.vc-th-btn-huy {
+	color: var(--vc-danger);
+}
+/* Lô hủy chỉ xem: ô khóa / chỉ đọc phải TRÔNG khác ô sửa được. */
+.vc-th-sec .vc-input:disabled,
+.vc-th-sec .vc-input[readonly] {
+	background: var(--vc-surface-2);
+	color: var(--vc-text-2);
+}
+.vc-th-goi-y {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.vc-th-goi-y .vc-chip {
+	border: 1px solid var(--vc-border);
+	font-family: inherit;
+	font-size: 0.78rem;
+	padding: 6px 10px;
+	cursor: pointer;
+	color: var(--vc-text);
+}
 /* Thẻ chọn (khách / điểm / mã hàng): cả thẻ là MỘT vùng bấm. */
 .vc-th-diem {
 	display: block;

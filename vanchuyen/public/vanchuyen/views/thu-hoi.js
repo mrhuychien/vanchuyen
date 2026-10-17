@@ -5,7 +5,7 @@ import { call, errText } from "../lib/api.js";
 import { skeleton } from "../lib/dom.js";
 import { escapeHtml, formatDate, formatQty } from "../lib/format.js";
 import { showToast } from "../components/toast.js";
-import { CHANG_FALLBACK, changBadge, changBar } from "../components/thu-hoi-ui.js";
+import { CHANG_FALLBACK, DA_HUY, changBadge, changBar, huyLine } from "../components/thu-hoi-ui.js";
 
 const S = { chang: "dang_mo", tim: "", page: 1, data: { rows: [], counts: {} } };
 
@@ -65,14 +65,16 @@ async function load(container) {
 function drawPills(container) {
 	const c = S.data.counts || {};
 	const ds = S.data.chang_list || CHANG_FALLBACK;
-	const tong = ds.reduce((a, k) => a + (c[k] || 0), 0);
-	const mo = tong - (c["Xong"] || 0);
+	const huy = c[DA_HUY] || 0;
+	const tong = ds.reduce((a, k) => a + (c[k] || 0), 0) + huy;
+	const mo = tong - (c["Xong"] || 0) - huy; // "Đang mở" = chưa Xong, chưa hủy — đúng như server lọc
 	const pill = (key, label, n) =>
 		`<button class="${S.chang === key ? "vc-active" : ""}" data-f="${escapeHtml(key)}">${escapeHtml(label)} (${n})</button>`;
 	const box = container.querySelector("#th-pills");
 	box.innerHTML =
 		pill("dang_mo", "Đang mở", mo) +
 		ds.map((k) => pill(k, k, c[k] || 0)).join("") +
+		pill(DA_HUY, DA_HUY, huy) +
 		pill("tat_ca", "Tất cả", tong);
 	box.querySelectorAll("[data-f]").forEach((b) =>
 		b.addEventListener("click", () => {
@@ -133,6 +135,7 @@ function card(r) {
 			${changBadge(r.chang, ds)}
 		</div>
 		${changBar(r.chang, ds)}
+		${r.chang === DA_HUY ? huyLine(r) : ""}
 		${r.dia_chi ? `<div class="vc-text-sm vc-text-muted vc-mt-1">📍 ${escapeHtml(r.dia_chi)}</div>` : ""}
 		<div class="vc-text-sm vc-mt-1">📅 ${escapeHtml(formatDate(r.ngay_yeu_cau))}${tuoi} · ${escapeHtml(r.name)}${r.ly_do ? " · " + escapeHtml(r.ly_do) : ""}</div>
 		<div class="vc-text-sm vc-text-muted vc-mt-1">${giao}</div>

@@ -6,14 +6,17 @@
 // kế toán lúc kiểm hàng — màn này không bắt gõ từng mã.
 // Server là sự thật: địa chỉ phải thuộc khách, đuôi file đính kèm, khóa khi kế toán đã
 // kiểm — màn hình chỉ kiểm cho mượt tay và hiện nguyên văn câu báo của server.
+// Hủy yêu cầu: lô GIỮ LẠI ở "Đã hủy" kèm lý do (không xóa), chỉ xem — trừ đính kèm (mail
+// hủy của siêu thị hay đến sau); "Khôi phục" đưa về đúng chặng trước khi hủy.
 import { call, upload, errText } from "../lib/api.js";
 import { skeleton } from "../lib/dom.js";
 import { escapeHtml, formatDate } from "../lib/format.js";
 import { go, replace } from "../lib/router.js";
 import { showToast } from "../components/toast.js";
 import { confirmDialog } from "../components/confirm.js";
+import { showModal, closeModal } from "../components/modal.js";
 import { chuanBiFile } from "../lib/anh.js";
-import { CHANG_FALLBACK, VAN_CHUYEN, changBadge, changBar } from "../components/thu-hoi-ui.js";
+import { CHANG_FALLBACK, DA_HUY, VAN_CHUYEN, changBadge, changBar, fmtLuc } from "../components/thu-hoi-ui.js";
 
 const VC = CHANG_FALLBACK.slice(0, VAN_CHUYEN); // ba chặng vận chuyển
 
@@ -81,6 +84,10 @@ function formFrom(d) {
 }
 
 const khoaKhach = () => !!(D && D.khoa_ke_toan);
+const daHuy = () => !!(D && D.trang_thai === DA_HUY);
+// Lô hủy chỉ xem: ô nhập / ô chọn khóa hẳn; ô văn bản (mail dán dài) để readonly — vẫn cuộn,
+// bôi chọn, copy được, thứ mà ô disabled không cho trên mọi trình duyệt.
+const chiDoc = () => (daHuy() ? " readonly" : "");
 
 // ── vẽ ───────────────────────────────────────────────────────────────────────
 function draw() {
@@ -105,14 +112,14 @@ function draw() {
 				${inp("sdt_lien_he", "SĐT liên hệ", "tel")}
 			</div>
 			<div class="vc-field"><label>Ghi chú</label>
-				<textarea class="vc-input" data-f="ghi_chu" style="min-height:56px">${escapeHtml(F.ghi_chu || "")}</textarea></div>
+				<textarea class="vc-input" data-f="ghi_chu" style="min-height:56px"${chiDoc()}>${escapeHtml(F.ghi_chu || "")}</textarea></div>
 			<div class="vc-text-sm vc-text-muted">Ngày yêu cầu = ngày siêu thị gọi / ngày trên phiếu xuất trả. Tuổi của lô tính từ ngày này.</div>
 		</div>
 		<div class="vc-card vc-th-sec">
 			<div class="vc-section-title">Chi tiết hàng cần thu</div>
 			<div class="vc-text-sm vc-text-muted vc-mb-2">Siêu thị gửi danh sách hàng qua mail thì copy cả bảng dán NGUYÊN VĂN vào đây.
 				Mã hàng + số lượng chính xác kế toán ghi lúc kiểm hàng.</div>
-			<textarea class="vc-input vc-th-paste" data-f="chi_tiet_hang" rows="8" spellcheck="false"
+			<textarea class="vc-input vc-th-paste" data-f="chi_tiet_hang" rows="8" spellcheck="false"${chiDoc()}
 				placeholder="Dán nội dung mail siêu thị gửi — danh sách hàng cần thu...">${escapeHtml(F.chi_tiet_hang || "")}</textarea>
 		</div>
 		<div class="vc-card vc-th-sec">
@@ -132,19 +139,21 @@ function draw() {
 				<input type="file" id="th-file" multiple accept="${ACCEPT}" style="display:none" /></label>
 			<div id="th-files" class="vc-mt-2"></div>
 		</div>
-		<div class="vc-th-actions">
+		${daHuy() ? "" : `<div class="vc-th-actions">
 			${D && D.trang_thai === "Tạo yêu cầu" ? `<button class="vc-btn-ghost" id="th-del"><i class="fas fa-trash"></i></button>` : ""}
 			<button class="vc-btn-primary" id="th-save" style="flex:1"><i class="fas fa-floppy-disk"></i> ${D ? "Lưu thay đổi" : "Tạo yêu cầu"}</button>
-		</div>`;
+		</div>`}`;
 	drawKhach();
 	drawFiles();
 	bind();
 }
 
 function headCard(ds) {
+	const huy = daHuy();
+	const ve = D.huy_tu || "Tạo yêu cầu"; // chặng trước khi hủy — Khôi phục về đúng đây
 	const i = VC.indexOf(D.trang_thai);
-	const tien = i >= 0 && i < VC.length - 1 ? VC[i + 1] : null;
-	const lui = i > 0 && !D.khoa_ke_toan ? VC[i - 1] : null;
+	const tien = !huy && i >= 0 && i < VC.length - 1 ? VC[i + 1] : null;
+	const lui = !huy && i > 0 && !D.khoa_ke_toan ? VC[i - 1] : null;
 	const moc = (nhan, luc, ai) => (luc ? `<dt>${nhan}</dt><dd>${escapeHtml(fmtLuc(luc))}${ai ? " · " + escapeHtml(ai) : ""}</dd>` : "");
 	const thuHoi = [D.don_vi_thu_hoi, D.ma_van_don ? "VĐ " + D.ma_van_don : "", D.ngay_hen_lay ? "thu " + formatDate(D.ngay_hen_lay) : ""]
 		.filter(Boolean)
@@ -165,12 +174,19 @@ function headCard(ds) {
 			${moc("Lấy hàng", D.lay_luc, D.lay_boi)}
 			${moc("Nhận về kho", D.nhan_luc, D.nhan_boi)}
 		</dl>
+		${huy ? `<div class="vc-th-huy-box vc-mt-2">
+			<div class="vc-font-bold">🚫 Đã hủy yêu cầu${D.huy_luc ? " · " + escapeHtml(fmtLuc(D.huy_luc)) : ""}${D.huy_boi ? " · " + escapeHtml(D.huy_boi) : ""}</div>
+			<div>Lý do: ${escapeHtml(D.ly_do_huy || "")}</div>
+			<div class="vc-text-sm">Hủy khi lô đang ở "${escapeHtml(ve)}". Lô hủy chỉ xem — vẫn đính kèm thêm được (mail hủy của siêu thị...).</div>
+		</div>` : ""}
 		${D.khoa_ke_toan ? `<div class="vc-th-note vc-mt-2">Kế toán đã mở phiếu kiểm hàng (chặng <b>${escapeHtml(D.chang)}</b>) —
-			khách và điểm lấy hàng đã khóa, không lùi chặng được nữa.</div>` : ""}
+			khách và điểm lấy hàng đã khóa, không lùi chặng được nữa. Muốn hủy lô: nhờ kế toán xóa phiếu kiểm trước.</div>` : ""}
 		${!D.co_ke_toan && D.trang_thai === "Đã nhận hàng" ? `<div class="vc-th-note vc-mt-2">Site chưa cài app kế toán — lô dừng ở "Đã nhận hàng".</div>` : ""}
 		<div class="vc-flex vc-gap-2 vc-mt-2" style="flex-wrap:wrap">
 			${tien ? `<button class="vc-btn-success" data-chang="${escapeHtml(tien)}"><i class="fas fa-arrow-right"></i> ${escapeHtml(tien)}</button>` : ""}
 			${lui ? `<button class="vc-btn-ghost" data-chang="${escapeHtml(lui)}"><i class="fas fa-rotate-left"></i> Lùi về "${escapeHtml(lui)}"</button>` : ""}
+			${huy ? `<button class="vc-btn-ghost" id="th-khoiphuc"><i class="fas fa-rotate-left"></i> Khôi phục về "${escapeHtml(ve)}"</button>`
+				: !D.khoa_ke_toan ? `<button class="vc-btn-ghost vc-th-btn-huy" id="th-huy"><i class="fas fa-ban"></i> Hủy yêu cầu</button>` : ""}
 		</div>
 	</div>`;
 }
@@ -179,7 +195,7 @@ function inp(f, label, type = "text") {
 	const v = F[f] === null || F[f] === undefined ? "" : F[f];
 	const extra = type === "number" ? ' inputmode="decimal" step="any" min="0"' : "";
 	return `<div class="vc-field"><label>${escapeHtml(label)}</label>
-		<input class="vc-input" data-f="${f}" type="${type}" value="${escapeHtml(v)}"${extra} /></div>`;
+		<input class="vc-input" data-f="${f}" type="${type}" value="${escapeHtml(v)}"${extra}${daHuy() ? " disabled" : ""} /></div>`;
 }
 
 // Giá trị đang lưu trên lô mà danh sách chọn không còn (lựa chọn Select vừa đổi trên Desk):
@@ -190,7 +206,7 @@ function giuGiaTri(f, opts) {
 }
 
 function sel(f, label, opts) {
-	return `<div class="vc-field"><label>${escapeHtml(label)}</label><select class="vc-input" data-f="${f}">${opts
+	return `<div class="vc-field"><label>${escapeHtml(label)}</label><select class="vc-input" data-f="${f}"${daHuy() ? " disabled" : ""}>${opts
 		.map(([v, t]) => `<option value="${escapeHtml(v)}" ${String(F[f] || "") === String(v) ? "selected" : ""}>${escapeHtml(t)}</option>`)
 		.join("")}</select></div>`;
 }
@@ -208,7 +224,7 @@ function drawKhach() {
 					<div class="vc-text-sm vc-text-muted">${escapeHtml(F.diem.name)}</div>
 				</div>${nut}</div>`
 			: "";
-	if (khoaKhach()) {
+	if (khoaKhach() || daHuy()) {
 		box.innerHTML = `<div class="vc-font-bold">${escapeHtml(F.customer_name || F.customer)}</div>
 			<div class="vc-text-sm vc-text-muted vc-mb-2">${escapeHtml(F.customer)}</div>${theDiem("")}`;
 		return;
@@ -337,9 +353,14 @@ function bind() {
 	);
 	bindKhach();
 	ROOT.querySelector("#th-file").addEventListener("change", onFiles);
-	ROOT.querySelector("#th-save").addEventListener("click", save);
+	const sv = ROOT.querySelector("#th-save");
+	if (sv) sv.addEventListener("click", save);
 	const del = ROOT.querySelector("#th-del");
 	if (del) del.addEventListener("click", xoaLo);
+	const huy = ROOT.querySelector("#th-huy");
+	if (huy) huy.addEventListener("click", huyLo);
+	const kp = ROOT.querySelector("#th-khoiphuc");
+	if (kp) kp.addEventListener("click", khoiPhuc);
 	ROOT.querySelectorAll("[data-chang]").forEach((b) => b.addEventListener("click", () => doiChang(b.dataset.chang, b)));
 }
 
@@ -530,11 +551,67 @@ function xoaLo() {
 	});
 }
 
-// "2026-10-17 09:12:33.4" → "17/10 09:12". Không đi qua new Date(): Safari không đọc
-// chuỗi có dấu cách giữa ngày và giờ.
-function fmtLuc(s) {
-	const m = String(s || "").match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
-	return m ? `${m[3]}/${m[2]} ${m[4]}:${m[5]}` : String(s || "");
+// Hủy: lý do BẮT BUỘC (server cũng chặn) — lô hủy giữ lại làm dấu vết, lý do là câu trả lời
+// cho "lô này đi đâu rồi". Gợi ý bấm một chạm cho mấy lý do hay gặp, sửa tiếp được.
+const GOI_Y_HUY = ["Siêu thị rút yêu cầu trả hàng", "Lập trùng / lập nhầm lô", "Đơn vị vận chuyển không lấy được hàng"];
+
+function huyLo() {
+	if (DIRTY) return showToast("Đang có thay đổi chưa lưu — bấm Lưu trước", "warning");
+	const box = showModal({
+		title: "Hủy yêu cầu xuất trả",
+		body: `<p class="vc-confirm-msg">Lô <b>${escapeHtml(D.name)}</b> chuyển sang <b>Đã hủy</b> và được GIỮ LẠI làm dấu vết
+			(không xóa). Hủy nhầm thì bấm "Khôi phục" — lô về lại "${escapeHtml(D.trang_thai)}".</p>
+			<div class="vc-th-goi-y">${GOI_Y_HUY.map((g) => `<button type="button" class="vc-chip" data-goi-y="${escapeHtml(g)}">${escapeHtml(g)}</button>`).join("")}</div>
+			<div class="vc-field vc-mt-2"><label>Lý do hủy *</label>
+				<textarea class="vc-input" id="th-ly-do-huy" rows="3" placeholder="Vì sao hủy — ai báo, lúc nào..."></textarea></div>`,
+		footer: `<button class="vc-btn-ghost" data-vc-close>Thôi</button>
+			<button class="vc-btn-danger" id="th-huy-ok"><i class="fas fa-ban"></i> Hủy yêu cầu</button>`,
+	});
+	if (!box) return;
+	const ta = box.querySelector("#th-ly-do-huy");
+	const ok = box.querySelector("#th-huy-ok");
+	box.querySelectorAll("[data-goi-y]").forEach((b) =>
+		b.addEventListener("click", () => {
+			ta.value = b.dataset.goiY;
+			ta.focus();
+		})
+	);
+	ok.addEventListener("click", async () => {
+		const ly = ta.value.trim();
+		if (ly.length < 5) return showToast("Ghi rõ lý do hủy (ít nhất 5 ký tự)", "warning");
+		ok.disabled = true;
+		try {
+			D = await call("vanchuyen.api.thu_hoi.huy_lo", { name: D.name, ly_do: ly });
+			closeModal();
+			F = formFrom(D);
+			DOI_DIEM = false;
+			draw();
+			showToast(`Đã hủy ${D.name}`, "success");
+		} catch (e) {
+			ok.disabled = false;
+			showToast(errText(e), "error");
+		}
+	});
+}
+
+function khoiPhuc() {
+	const ve = D.huy_tu || "Tạo yêu cầu";
+	confirmDialog({
+		title: "Khôi phục lô thu hồi",
+		message: `Đưa ${escapeHtml(D.name)} về lại "${escapeHtml(ve)}"? Lý do hủy cũ vẫn còn trong lịch sử thay đổi của lô (Desk).`,
+		okText: "Khôi phục",
+		onOk: async () => {
+			try {
+				D = await call("vanchuyen.api.thu_hoi.khoi_phuc_lo", { name: D.name });
+				F = formFrom(D);
+				DOI_DIEM = false;
+				draw();
+				showToast(`Đã khôi phục ${D.name}: ${D.trang_thai}`, "success");
+			} catch (e) {
+				showToast(errText(e), "error");
+			}
+		},
+	});
 }
 
 function errBox(msg) {

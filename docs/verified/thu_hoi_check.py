@@ -23,6 +23,11 @@ SÁU CÁI LỖ MÀ BỘ KIỂM NÀY CANH
    `_UPDATABLE`; màn hình gửi một field không có trong đó là người dùng gõ, bấm lưu,
    mất. Lái xe / xe / chuyến / bảng hàng khai đã bỏ (đơn vị vận chuyển ngoài lấy hàng,
    kế toán lo chi tiết hàng) — không được sót ở DocType, API hay màn hình.
+7. **Hủy mà mất dấu vết / hủy sau lưng kế toán.** Hủy yêu cầu GIỮ lô ở "Đã hủy" + lý do +
+   ai + lúc nào + chặng trước khi hủy; lô hủy không sửa / không chuyển chặng / không xóa;
+   Khôi phục về ĐÚNG chặng cũ. Kế toán đã mở phiếu kiểm thì không hủy được (cả trên Desk),
+   và `huy_lo` đọc KHÓA để không chạy đua với "Bắt đầu kiểm" bên ketoan. Danh sách: "Đang
+   mở" bỏ lô hủy, lô hủy xếp CUỐI (FIELD() trả 0 cho giá trị lạ = lên đầu).
 
 Kèm hai luật vỏ portal: mọi module trong lib/ + components/ có trong import map
 (Luật vàng #1 frappe-portal-spa), và BUILD của shell khớp SHELL_BUILD của server.
@@ -31,6 +36,7 @@ Chạy KHÔNG CẦN BENCH:
     python3 docs/verified/thu_hoi_check.py   # exit 0 = đạt
 """
 
+import copy
 import importlib
 import json
 import os
@@ -76,6 +82,10 @@ FILES = {}              # file -> {attached_to_doctype, attached_to_name, file_n
 INSERTED = []           # File đã insert qua _nhan_file
 DELETED = []            # (doctype, filters) đã db.delete
 STATE = {"roles": [], "si_write": False, "upload": []}
+LOTS = {}               # lô đọc bằng frappe.get_doc("Lo Thu Hoi", …) — API hủy / khôi phục
+LOCKS = []              # (lô, for_update) mỗi lần get_doc lô
+SQL_LOG = []            # (câu SQL, tham số) — soát mệnh đề list_lo, đọc khóa phiếu kiểm
+LIST_ROWS = []          # dòng trả cho truy vấn trang của list_lo
 META_OPTIONS = {"ly_do": "\nHàng date / cận date\nHàng lỗi", "don_vi_thu_hoi": "\nViettel Post\nNhất Tín\nKhác"}
 
 
@@ -106,9 +116,14 @@ def _stub_frappe():
 
     fr.get_meta = lambda dt: _Meta()
 
-    def _get_doc(dt, name=None):
+    def _get_doc(dt, name=None, for_update=False):
         if isinstance(dt, dict):  # File mới từ _nhan_file
             return _D(insert=lambda **k: INSERTED.append(dt["file_name"]))
+        if dt == "Lo Thu Hoi" and name in LOTS:
+            LOCKS.append((name, for_update))
+            d = LOTS[name]
+            d._before = copy.copy(d)  # như Frappe: bản trước khi lưu = bản vừa đọc
+            return d
         return _D(get_content=lambda: b"noi-dung")
 
     fr.get_doc = _get_doc
@@ -130,6 +145,8 @@ def _stub_frappe():
             if dt == "File":
                 f = FILES.get(name)
                 return _D(f) if f else None
+            if dt == "Lo Thu Hoi" and name in LOTS:
+                return LOTS[name].trang_thai
             return None
 
         def exists(self, dt, flt=None, *a, **k):
@@ -141,9 +158,15 @@ def _stub_frappe():
             return dt in TABLES
 
         def sql(self, query, values=None, **k):
-            if "tabKiem Hang Thu Hoi" in query:
+            SQL_LOG.append((query, dict(values or {})))
+            if "ORDER BY FIELD" in query:  # trang của list_lo (JOIN mềm sang phiếu kiểm)
+                return [_D(r) for r in LIST_ROWS]
+            if "SELECT COUNT(*)" in query and "GROUP BY" not in query:
+                return [[len(LIST_ROWS)]]
+            if "FROM `tabKiem Hang Thu Hoi`" in query:  # phieu_kiem / đọc khóa của huy_lo
                 names = (values or {}).get("n") or ()
-                return [_D(lo_thu_hoi=n, trang_thai=KIEM[n]) for n in names if n in KIEM]
+                names = (names,) if isinstance(names, str) else names
+                return [_D(name=n, lo_thu_hoi=n, trang_thai=KIEM[n]) for n in names if n in KIEM]
             return []
 
         def count(self, *a, **k):
@@ -190,6 +213,13 @@ def _stub_frappe():
 
         def get_doc_before_save(self):
             return self.__dict__.get("_before")
+
+        def set(self, k, v):
+            setattr(self, k, v)
+
+        def save(self, ignore_permissions=False):
+            self.before_validate()
+            self.validate()
 
     fmd.Document = Document
     sys.modules["frappe.model"] = fm
@@ -391,6 +421,77 @@ def main():
     for path, mod in (("/thu-hoi", "thu-hoi.js"), ("/thu-hoi/:id", "thu-hoi-detail.js")):
         check(f"route {path} khai trong shell + file view có thật",
               f'path: "{path}"' in shell and os.path.exists(os.path.join(PUB, "views", mod)))
+
+    # ── 8 ──────────────────────────────────────────────────────────────────
+    print("-" * 78)
+    print("── 8. Hủy yêu cầu: giữ dấu vết, chỉ khi kế toán chưa mở phiếu kiểm ─────")
+    STATE.update(roles=[], si_write=True)
+    TABLES.add("Kiem Hang Thu Hoi")
+    KIEM.clear()
+    LOTS["TH-H1"] = lo(name="TH-H1", trang_thai="Đã lấy hàng", lay_luc="2026-10-16 08:00:00", lay_boi="Điều hành",
+                       nhan_luc=None, nhan_boi=None, modified="2026-10-16 08:00:00")
+    check("hủy không lý do / lý do quá ngắn -> chặn, lô giữ nguyên",
+          raises(lambda: api.huy_lo("TH-H1", "")) and raises(lambda: api.huy_lo("TH-H1", "  abc ")) and
+          LOTS["TH-H1"].trang_thai == "Đã lấy hàng")
+    KIEM["TH-H1"] = "Đang kiểm"
+    r = raises(lambda: api.huy_lo("TH-H1", "Siêu thị rút yêu cầu"))
+    check("kế toán đã mở phiếu kiểm -> không hủy, chỉ đường: nhờ kế toán xóa phiếu kiểm",
+          r is not None and "xóa phiếu kiểm" in r and LOTS["TH-H1"].trang_thai == "Đã lấy hàng", r)
+    KIEM.clear()
+    LOCKS.clear()
+    SQL_LOG.clear()
+    d = api.huy_lo("TH-H1", "  Siêu thị rút yêu cầu  ")
+    x = LOTS["TH-H1"]
+    dau = tuple(x.get(f) for f in ("trang_thai", "ly_do_huy", "huy_boi", "huy_tu", "huy_luc"))
+    check("hủy: lô GIỮ LẠI ở 'Đã hủy' + lý do + ai + lúc nào + chặng trước khi hủy",
+          dau[:4] == ("Đã hủy", "Siêu thị rút yêu cầu", "Người bấm", "Đã lấy hàng") and bool(dau[4]), str(dau))
+    check("hủy không xóa mốc lấy hàng (dòng thời gian còn nguyên)", x.lay_luc and x.lay_boi == "Điều hành")
+    check("hủy: khóa hàng lô (for_update) + đọc KHÓA phiếu kiểm (FOR UPDATE) — không chạy đua với 'Bắt đầu kiểm'",
+          ("TH-H1", True) in LOCKS and any("tabKiem Hang Thu Hoi" in q and q.rstrip().endswith("FOR UPDATE")
+                                         for q, _p in SQL_LOG), str(LOCKS))
+    check("trả về cho màn hình: chặng 'Đã hủy' + lý do + chặng trước khi hủy",
+          d.get("chang") == "Đã hủy" and d.get("ly_do_huy") == "Siêu thị rút yêu cầu" and d.get("huy_tu") == "Đã lấy hàng")
+    check("hủy lần nữa -> chặn", raises(lambda: api.huy_lo("TH-H1", "Lập trùng lô")) is not None)
+    check("lô đã hủy: không sửa (save_lo)", "chỉ xem" in (raises(lambda: api.save_lo({"ghi_chu": "x"}, "TH-H1")) or ""))
+    check("lô đã hủy: không chuyển chặng", "chỉ xem" in (raises(lambda: api.chuyen_chang("TH-H1", "Đã nhận hàng")) or ""))
+    check("lô đã hủy: không xóa — giữ lại làm dấu vết",
+          "dấu vết" in (raises(lambda: api.xoa_lo("TH-H1")) or ""))
+    check("'Đã hủy' không đi đường chuyển chặng (chỉ qua huy_lo)", raises(lambda: api._dat_chang(lo(), "Đã hủy")) is not None)
+    api.khoi_phuc_lo("TH-H1")
+    x = LOTS["TH-H1"]
+    check("khôi phục: về ĐÚNG chặng trước khi hủy, bỏ dấu hủy, giữ mốc lấy hàng",
+          x.trang_thai == "Đã lấy hàng" and not any(x.get(f) for f in ("ly_do_huy", "huy_boi", "huy_luc", "huy_tu"))
+          and x.lay_luc, str((x.trang_thai, x.get("ly_do_huy"), x.get("huy_tu"))))
+    check("khôi phục lô KHÔNG hủy -> chặn", raises(lambda: api.khoi_phuc_lo("TH-H1")) is not None)
+    d = lo(trang_thai="Đã hủy", ly_do_huy="   ")
+    d.before_validate()
+    check("controller: 'Đã hủy' không lý do -> chặn (kể cả sửa trên Desk)", raises(d.validate) is not None)
+    KIEM["TH-2026-0001"] = "Đang kiểm"
+    d = lo(trang_thai="Đã hủy", ly_do_huy="Hủy trên Desk", _before=lo(trang_thai="Đã nhận hàng"))
+    d.before_validate()
+    check("controller: kế toán đã mở phiếu kiểm -> không hủy được kể cả trên Desk", raises(d.validate) is not None)
+    KIEM.clear()
+
+    LIST_ROWS[:] = [dict(name="TH-H2", chang="Đã hủy", trang_thai="Đã hủy", ngay_yeu_cau="2026-10-01"),
+                    dict(name="TH-H3", chang="Đã nhận hàng", trang_thai="Đã nhận hàng", ngay_yeu_cau="2026-10-01")]
+    SQL_LOG.clear()
+    res = api.list_lo()
+    q, pr = next((q, pr) for q, pr in reversed(SQL_LOG) if "ORDER BY FIELD" in q)
+    check("'Đang mở' bỏ cả 'Xong' lẫn 'Đã hủy'", "NOT IN (%(xong)s, %(huy)s)" in q and pr.get("huy") == "Đã hủy", q[-160:])
+    thu_tu = [pr.get(f"c{i}") for i in range(9) if f"c{i}" in pr]
+    check("xếp danh sách: lô 'Đã hủy' nằm CUỐI (có trong FIELD, sau 'Xong')",
+          thu_tu[-2:] == ["Xong", "Đã hủy"] and f"%(c{len(thu_tu) - 1})s" in q, str(thu_tu))
+    check("lô hủy không tính tuổi (không trôi lên thành 'lô treo lâu')",
+          res["rows"][0]["tuoi"] is None and res["rows"][1]["tuoi"] == 0, str([r["tuoi"] for r in res["rows"]]))
+    api.list_lo(chang="Đã hủy")
+    q, pr = next((q, pr) for q, pr in reversed(SQL_LOG) if "ORDER BY FIELD" in q)
+    check("lọc riêng pill 'Đã hủy' được", "= %(chang)s" in q and pr.get("chang") == "Đã hủy")
+    LIST_ROWS.clear()
+    ui = open(os.path.join(PUB, "components", "thu-hoi-ui.js"), encoding="utf-8").read()
+    check("DocType: trạng thái có 'Đã hủy'; dấu hủy là field CHỈ ĐỌC (chỉ API ghi)",
+          "Đã hủy" in fields["trang_thai"]["options"].split("\n")
+          and all(fields.get(f, {}).get("read_only") for f in ("ly_do_huy", "huy_boi", "huy_luc", "huy_tu")))
+    check("màn hình dùng ĐÚNG chữ 'Đã hủy' của server", lo_mod.DA_HUY == "Đã hủy" and 'export const DA_HUY = "Đã hủy";' in ui)
 
     print("=" * 78)
     print("ĐẠT" if ok_all else "CÓ MỤC ĐỎ")

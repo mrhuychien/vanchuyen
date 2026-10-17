@@ -41,7 +41,13 @@
   "col_break_tien_do",
   "nhan_luc",
   "nhan_boi",
-  "so_kien_nhan"
+  "so_kien_nhan",
+  "sec_huy",
+  "ly_do_huy",
+  "huy_tu",
+  "col_break_huy",
+  "huy_luc",
+  "huy_boi"
  ],
  "fields": [
   {
@@ -62,7 +68,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Trạng thái vận chuyển",
-   "options": "Tạo yêu cầu\nĐã lấy hàng\nĐã nhận hàng",
+   "options": "Tạo yêu cầu\nĐã lấy hàng\nĐã nhận hàng\nĐã hủy",
    "read_only": 1
   },
   {
@@ -257,12 +263,47 @@
    "fieldname": "so_kien_nhan",
    "fieldtype": "Float",
    "label": "Số kiện thực nhận"
+  },
+  {
+   "depends_on": "eval:doc.trang_thai=='Đã hủy'",
+   "fieldname": "sec_huy",
+   "fieldtype": "Section Break",
+   "label": "Hủy yêu cầu"
+  },
+  {
+   "fieldname": "ly_do_huy",
+   "fieldtype": "Small Text",
+   "label": "Lý do hủy",
+   "read_only": 1
+  },
+  {
+   "description": "Khôi phục đưa lô về đúng chặng này",
+   "fieldname": "huy_tu",
+   "fieldtype": "Data",
+   "label": "Chặng trước khi hủy",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_huy",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "huy_luc",
+   "fieldtype": "Datetime",
+   "label": "Lúc hủy",
+   "read_only": 1
+  },
+  {
+   "fieldname": "huy_boi",
+   "fieldtype": "Data",
+   "label": "Người hủy",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "is_submittable": 0,
  "links": [],
- "modified": "2026-10-17 10:00:00",
+ "modified": "2026-10-17 14:00:00",
  "module": "Van Chuyen",
  "name": "Lo Thu Hoi",
  "naming_rule": "By \"Naming Series\" field",

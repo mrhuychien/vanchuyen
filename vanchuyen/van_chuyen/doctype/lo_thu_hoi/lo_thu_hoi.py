@@ -33,7 +33,16 @@ KẾ TOÁN ĐÃ MỞ PHIẾU KIỂM THÌ KHÓA KHÁCH / ĐIỂM / CHẶNG
 
 Phiếu kiểm chép khách + điểm lúc mở, rồi hóa đơn trả về dựng trên đó. Cho đổi
 khách ở đây sau lúc ấy là hai bảng nói về hai khách khác nhau mà không bảng nào
-biết. Lùi chặng ("chưa nhận hàng") khi hàng đã được đếm cũng vậy.
+biết. Lùi chặng ("chưa nhận hàng") khi hàng đã được đếm cũng vậy — và HỦY cũng vậy.
+
+════════════════════════════════════════════════════════════════════════════
+HỦY YÊU CẦU — GIỮ LÔ LÀM DẤU VẾT, KHÔNG XÓA
+════════════════════════════════════════════════════════════════════════════
+
+Siêu thị rút yêu cầu, lập trùng, đơn vị vận chuyển không lấy được hàng… → "Đã hủy" kèm
+lý do + ai / lúc nào + chặng trước khi hủy (`huy_tu`, để Khôi phục về đúng chỗ). Xóa thì
+mất luôn câu trả lời cho "lô này đi đâu rồi". "Đã hủy" KHÔNG phải một nấc của 7 chặng:
+lô dừng hẳn, không tính vào "đang mở". Chỉ hủy được khi kế toán CHƯA mở phiếu kiểm.
 """
 
 import frappe
@@ -45,6 +54,8 @@ TAO = "Tạo yêu cầu"
 DA_LAY = "Đã lấy hàng"
 DA_NHAN = "Đã nhận hàng"
 TRANG_THAI = (TAO, DA_LAY, DA_NHAN)
+DA_HUY = "Đã hủy"  # ngoài tiến trình — xem "HỦY YÊU CẦU" ở đầu file
+_DAU_HUY = ("ly_do_huy", "huy_boi", "huy_luc", "huy_tu")
 
 # Phiếu kiểm hàng bên ketoan — CHỈ ĐỌC, và đọc MỀM.
 KIEM_DT = "Kiem Hang Thu Hoi"
@@ -133,8 +144,15 @@ class LoThuHoi(Document):
 		) if self.name and not self.is_new() else 0
 
 	def validate(self):
-		if self.trang_thai not in TRANG_THAI:
+		if self.trang_thai not in TRANG_THAI + (DA_HUY,):
 			frappe.throw(_("Trạng thái vận chuyển không hợp lệ: {0}").format(self.trang_thai))
+		if self.trang_thai == DA_HUY:
+			if not cstr(self.get("ly_do_huy")).strip():
+				frappe.throw(_("Hủy yêu cầu phải ghi lý do — lô hủy được giữ lại làm dấu vết."))
+		else:
+			# Không còn hủy (Khôi phục) → bỏ dấu hủy trên bản ghi; dấu cũ còn trong Version.
+			for f in _DAU_HUY:
+				setattr(self, f, None)
 		if not dia_chi_cua_khach(self.shipping_address_name, self.customer):
 			frappe.throw(
 				_(
@@ -185,6 +203,13 @@ class LoThuHoi(Document):
 		before = self.get_doc_before_save()
 		if not before or not phieu_kiem([self.name]):
 			return
+		if self.trang_thai == DA_HUY and before.trang_thai != DA_HUY:
+			frappe.throw(
+				_(
+					"Kế toán đã mở phiếu kiểm hàng cho lô {0} — không hủy được nữa. Nhờ kế toán xóa "
+					"phiếu kiểm trước, hoặc Kế toán trưởng kết luận 'không lập hóa đơn trả về'."
+				).format(self.name)
+			)
 		doi = [
 			lbl
 			for f, lbl in (("customer", _("khách hàng")), ("shipping_address_name", _("điểm lấy hàng")))
@@ -197,8 +222,10 @@ class LoThuHoi(Document):
 					"và hóa đơn trả về đã dựng trên giá trị cũ."
 				).format(self.name, ", ".join(doi))
 			)
-		if before.trang_thai in TRANG_THAI and TRANG_THAI.index(self.trang_thai) < TRANG_THAI.index(
-			before.trang_thai
+		if (
+			before.trang_thai in TRANG_THAI
+			and self.trang_thai in TRANG_THAI
+			and TRANG_THAI.index(self.trang_thai) < TRANG_THAI.index(before.trang_thai)
 		):
 			frappe.throw(
 				_("Kế toán đã kiểm hàng của lô {0} — không lùi chặng vận chuyển được nữa.").format(self.name)

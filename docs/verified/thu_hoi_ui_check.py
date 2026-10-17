@@ -19,6 +19,10 @@ NHỮNG ĐIỀU MÀN HÌNH HỨA
    gạt ngay ở máy (không tải lên), file Excel gửi NGUYÊN (không bị "nén ảnh"); thẻ file Excel
    có biểu tượng Excel và tải về (`download`), PDF mở tab mới.
 5. **Màn lái xe #/chuyen không còn khối "Lấy hàng thu hồi"** — không gọi API thu hồi nào.
+5b. **Hủy yêu cầu có lý do, lô giữ lại chỉ xem, Khôi phục về đúng chặng.** Không lý do thì
+   không gọi server; lô hủy khóa ô nhập / nút Lưu / chuyển chặng nhưng ô mail dán vẫn đọc,
+   cuộn, copy được (readonly) và vẫn đính kèm thêm được; danh sách: "Đang mở" không đếm lô
+   hủy, pill "Đã hủy" riêng; lô kế toán đã kiểm không có nút Hủy.
 6. Lô kế toán đã kiểm: không đổi khách / điểm. Máy tính 1280px không cuộn ngang. Không lỗi
    JS / console / HTTP.
 
@@ -104,6 +108,11 @@ MOCK_JS = r"""
       chi_tiet_hang:"\tMã hàng\tSL\nBDX-170\t48", so_dinh_kem:2, khoa_ke_toan:false, co_ke_toan:true, tuoi:7,
       files:[{name:"F1", file_name:"phieu.pdf", ext:"pdf", is_image:false, url:"/api/method/vanchuyen.api.thu_hoi.xem_dinh_kem?file=F1"},
              {name:"F2", file_name:"ds-hang.xlsx", ext:"xlsx", is_image:false, url:"/api/method/vanchuyen.api.thu_hoi.xem_dinh_kem?file=F2"}] },
+    "TH-2026-0009": { name:"TH-2026-0009", trang_thai:"Đã lấy hàng", chang:"Đã lấy hàng", ngay_yeu_cau:"2026-10-12",
+      customer:"COOP", customer_name:"Saigon Co.op", shipping_address_name:"ADDR-TL", ten_diem:"Co.opMart Thắng Lợi",
+      dia_chi:"2 Thái Hà, Đống Đa", don_vi_thu_hoi:"Nhất Tín", ma_van_don:"NT-555", lay_luc:"2026-10-13 09:00:00",
+      lay_boi:"Điều hành", chi_tiet_hang:"\tMã hàng\tSL\nBDX-300\t12", so_dinh_kem:0, files:[], khoa_ke_toan:false,
+      co_ke_toan:true, tuoi:5 },
     "TH-2026-0002": { name:"TH-2026-0002", trang_thai:"Đã nhận hàng", chang:"Đã kiểm hàng", ngay_yeu_cau:"2026-10-01",
       customer:"BIGC", customer_name:"Central Retail", shipping_address_name:"ADDR-BC", ten_diem:"GO! Thăng Long",
       dia_chi:"222 Trần Duy Hưng", don_vi_thu_hoi:"Nhất Tín", so_dinh_kem:0, files:[], khoa_ke_toan:true, co_ke_toan:true,
@@ -113,7 +122,7 @@ MOCK_JS = r"""
   const detail = (n) => Object.assign(clone(lots[n]), { chang_list: CHANG });
   const H = {
     "vanchuyen.api.thu_hoi.list_lo": (a) => {
-      const rows = Object.values(lots).filter(l => a.chang === "tat_ca" || (a.chang === "dang_mo" ? l.chang !== "Xong" : l.chang === a.chang));
+      const rows = Object.values(lots).filter(l => a.chang === "tat_ca" || (a.chang === "dang_mo" ? !["Xong", "Đã hủy"].includes(l.chang) : l.chang === a.chang));
       const counts = {}; Object.values(lots).forEach(l => counts[l.chang] = (counts[l.chang]||0)+1);
       return { rows: clone(rows), total: rows.length, has_more:false, counts, chang_list: CHANG, co_ke_toan:true };
     },
@@ -130,6 +139,17 @@ MOCK_JS = r"""
       return detail(n);
     },
     "vanchuyen.api.thu_hoi.chuyen_chang": (a) => { lots[a.name].trang_thai = lots[a.name].chang = a.trang_thai; return detail(a.name); },
+    "vanchuyen.api.thu_hoi.huy_lo": (a) => {
+      const l = lots[a.name];
+      Object.assign(l, { huy_tu: l.trang_thai, trang_thai: "Đã hủy", chang: "Đã hủy", ly_do_huy: a.ly_do,
+        huy_boi: "Điều hành", huy_luc: "2026-10-17 11:00:00" });
+      return detail(a.name);
+    },
+    "vanchuyen.api.thu_hoi.khoi_phuc_lo": (a) => {
+      const l = lots[a.name];
+      Object.assign(l, { trang_thai: l.huy_tu, chang: l.huy_tu, ly_do_huy: null, huy_boi: null, huy_luc: null, huy_tu: null });
+      return detail(a.name);
+    },
     "vanchuyen.api.lai_xe.get_my_trips": () => [{name:"CX-1", ngay_giao:today, xe:"29C-555", trang_thai:"Đang giao", stops_giao:1, stops_total:3}],
   };
   window.__lots = lots;
@@ -344,6 +364,67 @@ def run(pw, exe, root, shots, ok, bad):
     expect("lô kế toán đã kiểm: không đổi khách / điểm",
            not p.query_selector("#th-doi-khach, #th-doi-diem, #th-diem-q, #th-cust-q")
            and "Kế toán đã mở phiếu kiểm" in p.text_content("main"))
+    expect("lô kế toán đã kiểm: KHÔNG có nút Hủy, chỉ đường nhờ kế toán xóa phiếu kiểm trước",
+           p.query_selector("#th-huy") is None and "xóa phiếu kiểm trước" in p.text_content("main"))
+    p.close()
+
+    # 4b. Hủy yêu cầu → lô chỉ xem → Khôi phục; danh sách đếm đúng
+    p = mo(DIEU_HANH, "#/thu-hoi/TH-2026-0009")
+    expect("lô chưa kế toán kiểm: có nút 'Hủy yêu cầu'", p.query_selector("#th-huy") is not None)
+    p.click("#th-huy")
+    p.wait_for_timeout(200)
+    p.click("#th-huy-ok")  # chưa ghi lý do
+    p.wait_for_timeout(200)
+    expect("hủy chưa ghi lý do: KHÔNG gọi server, nhắc ghi lý do",
+           not calls(p, "vanchuyen.api.thu_hoi.huy_lo") and "lý do" in (p.text_content("#vc-toast-mount") or ""))
+    p.click('[data-goi-y="Siêu thị rút yêu cầu trả hàng"]')
+    expect("chạm gợi ý: điền sẵn lý do (sửa tiếp được)", p.input_value("#th-ly-do-huy") == "Siêu thị rút yêu cầu trả hàng")
+    if shots:
+        p.screenshot(path=os.path.join(shots, "vc_huy_hoi.png"))
+    p.click("#th-huy-ok")
+    p.wait_for_timeout(500)
+    hc = calls(p, "vanchuyen.api.thu_hoi.huy_lo")
+    expect("hủy: gửi lý do lên server", len(hc) == 1 and hc[0]["args"].get("ly_do") == "Siêu thị rút yêu cầu trả hàng",
+           str(hc))
+    m = p.text_content("main")
+    expect("lô hủy: khung 'Đã hủy yêu cầu' + ai + lý do + nút 'Khôi phục về' đúng chặng cũ",
+           "Đã hủy yêu cầu" in m and "Điều hành" in m and "Siêu thị rút yêu cầu trả hàng" in m
+           and 'Khôi phục về "Đã lấy hàng"' in m)
+    expect("lô hủy chỉ xem: ô nhập khóa, không nút Lưu / chuyển chặng / Hủy",
+           p.is_disabled('[data-f="so_phieu_sieu_thi"]') and p.is_disabled('[data-f="don_vi_thu_hoi"]')
+           and p.query_selector("#th-save") is None and not p.query_selector("[data-chang]")
+           and p.query_selector("#th-huy") is None and p.query_selector("#th-doi-diem") is None)
+    expect("lô hủy: ô mail dán vẫn đọc / cuộn / copy được (readonly, không disabled)",
+           p.get_attribute('[data-f="chi_tiet_hang"]', "readonly") is not None and not p.is_disabled('[data-f="chi_tiet_hang"]'))
+    expect("lô hủy: vẫn đính kèm thêm được (mail hủy của siêu thị đến sau)", not p.is_disabled("#th-file"))
+    if shots:
+        p.screenshot(path=os.path.join(shots, "vc_huy.png"), full_page=True)
+    p.click("#th-khoiphuc")
+    p.wait_for_timeout(200)
+    p.click("[data-vc-ok]")
+    p.wait_for_timeout(500)
+    expect("khôi phục: về 'Đã lấy hàng', sửa được lại, có lại nút Hủy",
+           len(calls(p, "vanchuyen.api.thu_hoi.khoi_phuc_lo")) == 1 and not p.is_disabled('[data-f="so_phieu_sieu_thi"]')
+           and p.query_selector("#th-huy") is not None and "Đã lấy hàng" in p.text_content(".vc-order-head .vc-badge"))
+    p.click("#th-huy")
+    p.wait_for_timeout(200)
+    p.fill("#th-ly-do-huy", "Lập trùng lô với TH-2026-0001")
+    p.click("#th-huy-ok")
+    p.wait_for_timeout(500)
+    p.evaluate("location.hash = '#/thu-hoi'")
+    p.wait_for_timeout(600)
+    pills = p.text_content("#th-pills")
+    expect("danh sách: 'Đang mở' KHÔNG đếm lô hủy, có pill 'Đã hủy (1)', 'Tất cả' đếm đủ",
+           "Đang mở (2)" in pills and "Đã hủy (1)" in pills and "Tất cả (3)" in pills, pills)
+    expect("danh sách 'Đang mở' không hiện lô hủy", "TH-2026-0009" not in p.text_content("#th-list"))
+    p.click('#th-pills [data-f="Đã hủy"]')
+    p.wait_for_timeout(500)
+    ds = p.text_content("#th-list")
+    expect("pill 'Đã hủy': thẻ lô có huy hiệu đỏ + 🚫 lý do, không nút chuyển chặng",
+           "Lập trùng lô với TH-2026-0001" in ds and p.query_selector("#th-list .vc-badge-danger") is not None
+           and not p.query_selector("#th-list [data-tien]"), ds[:160])
+    if shots:
+        p.screenshot(path=os.path.join(shots, "vc_list_huy.png"), full_page=True)
     p.close()
 
     # 5. Lái xe: không còn khối lấy hàng thu hồi

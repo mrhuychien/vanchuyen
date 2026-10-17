@@ -61,8 +61,12 @@ trong tab, loại khác tải về). Mã hàng + số lượng chính xác do k�
 | Đang kiểm → Đã kiểm hàng → Đã nhập chứng từ → Xong | kế toán (app `ketoan`, phiếu `Kiem Hang Thu Hoi`) | portal `/ketoan#/thu-hoi` |
 
 App này **chỉ đọc mềm** phiếu kiểm bên ketoan để hiện chặng tổng; khi kế toán đã mở
-phiếu kiểm thì khách / điểm bị khóa, không lùi chặng hay xóa lô được nữa. Thiết kế
-đầy đủ: [`docs/thu-hoi/blueprint-thu-hoi.md`](docs/thu-hoi/blueprint-thu-hoi.md).
+phiếu kiểm thì khách / điểm bị khóa, không lùi chặng, xóa hay hủy lô được nữa.
+
+**Hủy yêu cầu** (siêu thị rút yêu cầu, lập trùng, không lấy được hàng…): lô GIỮ LẠI ở
+**Đã hủy** kèm lý do (bắt buộc) · ai · lúc nào · chặng lúc hủy — không xóa. Lô hủy chỉ xem
+(vẫn đính kèm thêm được), không tính vào "Đang mở"; **Khôi phục** đưa về đúng chặng cũ.
+Thiết kế đầy đủ: [`docs/thu-hoi/blueprint-thu-hoi.md`](docs/thu-hoi/blueprint-thu-hoi.md).
 Cài / cập nhật bản này cần `bench --site <site> migrate`.
 
 ## Verify trước khi ship

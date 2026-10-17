@@ -6,11 +6,21 @@ import { escapeHtml } from "../lib/format.js";
 // Fallback khi server cũ chưa trả `chang_list` — nguồn thật là lo_thu_hoi.CHANG.
 export const CHANG_FALLBACK = ["Tạo yêu cầu", "Đã lấy hàng", "Đã nhận hàng", "Đang kiểm", "Đã kiểm hàng", "Đã nhập chứng từ", "Xong"];
 export const VAN_CHUYEN = 3; // ba chặng đầu thuộc app này, bốn chặng sau thuộc kế toán
+// Hủy yêu cầu (lo_thu_hoi.DA_HUY): KHÔNG phải một nấc của thanh 7 nấc — lô dừng hẳn.
+export const DA_HUY = "Đã hủy";
+
+// "2026-10-17 09:12:33.4" → "17/10 09:12". Không đi qua new Date(): Safari không đọc
+// chuỗi có dấu cách giữa ngày và giờ.
+export function fmtLuc(s) {
+	const m = String(s || "").match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+	return m ? `${m[3]}/${m[2]} ${m[4]}:${m[5]}` : String(s || "");
+}
 
 export function changBadge(chang, list = CHANG_FALLBACK) {
 	const i = list.indexOf(chang);
 	let c = "vc-badge-muted";
-	if (chang === "Tạo yêu cầu") c = "vc-badge-warning";
+	if (chang === DA_HUY) c = "vc-badge-danger";
+	else if (chang === "Tạo yêu cầu") c = "vc-badge-warning";
 	else if (i >= 0 && i < VAN_CHUYEN) c = "vc-badge-primary";
 	else if (chang === "Xong") c = "vc-badge-success";
 	return `<span class="vc-badge ${c}">${escapeHtml(chang || "")}</span>`;
@@ -19,6 +29,7 @@ export function changBadge(chang, list = CHANG_FALLBACK) {
 // Thanh 7 nấc: nấc đã qua tô đậm, nấc đang đứng có viền. Ba nấc đầu màu vận chuyển,
 // bốn nấc sau màu kế toán — nhìn là biết lô đang nằm ở bên nào.
 export function changBar(chang, list = CHANG_FALLBACK) {
+	if (chang === DA_HUY) return ""; // lô hủy không có tiến độ để vẽ — huy hiệu + dòng lý do nói đủ
 	const i = list.indexOf(chang);
 	return `<div class="vc-th-steps" title="${escapeHtml(chang || "")}">${list
 		.map((c, k) => {
@@ -28,4 +39,10 @@ export function changBar(chang, list = CHANG_FALLBACK) {
 			return `<span class="${cls.join(" ")}"></span>`;
 		})
 		.join("")}</div>`;
+}
+
+// Một dòng nói lô bị hủy: lúc nào · ai — lý do.
+export function huyLine(r) {
+	const ai = [r.huy_luc ? fmtLuc(r.huy_luc) : "", r.huy_boi || ""].filter(Boolean).join(" · ");
+	return `<div class="vc-th-huy">🚫 Đã hủy${ai ? " " + escapeHtml(ai) : ""} — ${escapeHtml(r.ly_do_huy || "không ghi lý do")}</div>`;
 }
