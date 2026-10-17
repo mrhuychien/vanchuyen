@@ -3,7 +3,7 @@ Chưa login → redirect /login?redirect-to=/vc. Không role nào → trang 'kh�
 
 import frappe
 
-SHELL_BUILD = "2026-10-17-th1"
+SHELL_BUILD = "2026-10-17-p6-th1"
 
 
 def get_context(context):

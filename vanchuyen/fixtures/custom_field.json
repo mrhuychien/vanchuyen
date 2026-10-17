@@ -178,5 +178,152 @@
   "description": "Loại · trạng thái sự cố mới nhất (app tự cập nhật)",
   "insert_after": "custom_co_su_co",
   "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Vehicle-custom_loai_xe",
+  "dt": "Vehicle",
+  "fieldname": "custom_loai_xe",
+  "label": "Loại xe",
+  "fieldtype": "Select",
+  "options": "Xe tải\nXe con",
+  "default": "Xe tải",
+  "in_list_view": 1,
+  "in_standard_filter": 1,
+  "description": "Chỉ XE TẢI hiện ở màn Xếp chuyến (portal /vc). Xe con chỉ quản lý lịch đăng kiểm / bảo dưỡng ở màn Quản lý xe.",
+  "insert_after": "license_plate",
+  "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Vehicle-custom_ngung_su_dung",
+  "dt": "Vehicle",
+  "fieldname": "custom_ngung_su_dung",
+  "label": "Ngừng sử dụng",
+  "fieldtype": "Check",
+  "default": "0",
+  "in_standard_filter": 1,
+  "description": "Xe đã bán / thanh lý / nằm gara lâu: ẩn khỏi Xếp chuyến và khỏi danh sách cần chú ý ở portal /vc. Lịch + nhật ký vẫn giữ.",
+  "insert_after": "custom_loai_xe",
+  "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Vehicle-custom_ly_do_ngung",
+  "dt": "Vehicle",
+  "fieldname": "custom_ly_do_ngung",
+  "label": "Lý do ngừng",
+  "fieldtype": "Data",
+  "depends_on": "eval:doc.custom_ngung_su_dung",
+  "insert_after": "custom_ngung_su_dung",
+  "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Vehicle-custom_ngay_cap_nhat_km",
+  "dt": "Vehicle",
+  "fieldname": "custom_ngay_cap_nhat_km",
+  "label": "Ngày đọc km",
+  "fieldtype": "Date",
+  "read_only": 1,
+  "description": "Ngày số km đồng hồ được cập nhật lần cuối (portal tự ghi). Km đọc đã lâu thì nhắc thay dầu theo km kém tin cậy.",
+  "insert_after": "last_odometer",
+  "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Vehicle-custom_sec_lich_xe",
+  "dt": "Vehicle",
+  "fieldname": "custom_sec_lich_xe",
+  "label": "Lịch đăng kiểm & thay dầu",
+  "fieldtype": "Section Break",
+  "insert_after": "amended_from",
+  "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Vehicle-custom_chu_ky_dang_kiem",
+  "dt": "Vehicle",
+  "fieldname": "custom_chu_ky_dang_kiem",
+  "label": "Chu kỳ đăng kiểm",
+  "fieldtype": "Select",
+  "options": "\n6 tháng\n1 năm\n2 năm\nNgày cụ thể",
+  "insert_after": "custom_sec_lich_xe",
+  "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Vehicle-custom_ngay_dang_kiem",
+  "dt": "Vehicle",
+  "fieldname": "custom_ngay_dang_kiem",
+  "label": "Đăng kiểm gần nhất",
+  "fieldtype": "Date",
+  "description": "Tự cập nhật khi ghi nhận đăng kiểm ở portal /vc (Quản lý xe).",
+  "insert_after": "custom_chu_ky_dang_kiem",
+  "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Vehicle-custom_han_dang_kiem",
+  "dt": "Vehicle",
+  "fieldname": "custom_han_dang_kiem",
+  "label": "Hạn đăng kiểm",
+  "fieldtype": "Date",
+  "read_only_depends_on": "eval:['6 tháng','1 năm','2 năm'].includes(doc.custom_chu_ky_dang_kiem)",
+  "description": "Chu kỳ 6 tháng / 1 năm / 2 năm: máy tự tính = đăng kiểm gần nhất + chu kỳ. 'Ngày cụ thể': nhập tay theo giấy chứng nhận.",
+  "insert_after": "custom_ngay_dang_kiem",
+  "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Vehicle-custom_col_lich_xe",
+  "dt": "Vehicle",
+  "fieldname": "custom_col_lich_xe",
+  "fieldtype": "Column Break",
+  "insert_after": "custom_han_dang_kiem",
+  "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Vehicle-custom_thay_dau_moi_km",
+  "dt": "Vehicle",
+  "fieldname": "custom_thay_dau_moi_km",
+  "label": "Thay dầu mỗi (km)",
+  "fieldtype": "Int",
+  "description": "VD 5000. Để 0 nếu chỉ theo tháng.",
+  "insert_after": "custom_col_lich_xe",
+  "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Vehicle-custom_thay_dau_moi_thang",
+  "dt": "Vehicle",
+  "fieldname": "custom_thay_dau_moi_thang",
+  "label": "Thay dầu mỗi (tháng)",
+  "fieldtype": "Int",
+  "description": "Để 0 nếu chỉ theo km. Đặt cả hai thì mốc nào tới trước tính mốc đó.",
+  "insert_after": "custom_thay_dau_moi_km",
+  "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Vehicle-custom_ngay_thay_dau",
+  "dt": "Vehicle",
+  "fieldname": "custom_ngay_thay_dau",
+  "label": "Thay dầu gần nhất (ngày)",
+  "fieldtype": "Date",
+  "description": "Tự cập nhật khi ghi nhận thay dầu ở portal /vc (Quản lý xe).",
+  "insert_after": "custom_thay_dau_moi_thang",
+  "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Vehicle-custom_km_thay_dau",
+  "dt": "Vehicle",
+  "fieldname": "custom_km_thay_dau",
+  "label": "Thay dầu gần nhất (km)",
+  "fieldtype": "Int",
+  "insert_after": "custom_ngay_thay_dau",
+  "module": "Van Chuyen"
  }
 ]

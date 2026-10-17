@@ -1,0 +1,156 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-10-17 00:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "xe",
+  "loai",
+  "ngay",
+  "col_break_head",
+  "so_km",
+  "chi_phi",
+  "noi_thuc_hien",
+  "sec_noi_dung",
+  "noi_dung",
+  "ghi_chu",
+  "dinh_kem",
+  "sec_lich",
+  "han_tiep",
+  "col_break_lich",
+  "km_tiep"
+ ],
+ "fields": [
+  {
+   "default": "NKX-.YYYY.-.####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "NKX-.YYYY.-.####",
+   "print_hide": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "xe",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Xe",
+   "options": "Vehicle",
+   "reqd": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "loai",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Hạng mục",
+   "options": "Đăng kiểm\nThay dầu\nBảo dưỡng\nSửa chữa",
+   "reqd": 1,
+   "set_only_once": 1
+  },
+  {
+   "default": "Today",
+   "fieldname": "ngay",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Ngày thực hiện",
+   "reqd": 1,
+   "description": "Ngày việc ĐÃ LÀM (không được ở tương lai). Bản ghi Đăng kiểm/Thay dầu mới nhất là mốc tính lịch của xe."
+  },
+  {
+   "fieldname": "col_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "so_km",
+   "fieldtype": "Int",
+   "label": "Số km lúc làm",
+   "description": "Đọc trên đồng hồ công-tơ-mét. Lớn hơn số km đang lưu trên xe thì tự cập nhật luôn số km của xe."
+  },
+  {
+   "fieldname": "chi_phi",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Chi phí (đ)"
+  },
+  {
+   "fieldname": "noi_thuc_hien",
+   "fieldtype": "Data",
+   "label": "Nơi làm (gara / trạm đăng kiểm)"
+  },
+  {
+   "fieldname": "sec_noi_dung",
+   "fieldtype": "Section Break",
+   "label": "Nội dung"
+  },
+  {
+   "fieldname": "noi_dung",
+   "fieldtype": "Small Text",
+   "label": "Nội dung công việc"
+  },
+  {
+   "fieldname": "ghi_chu",
+   "fieldtype": "Small Text",
+   "label": "Ghi chú"
+  },
+  {
+   "fieldname": "dinh_kem",
+   "fieldtype": "Attach Image",
+   "label": "Ảnh hoá đơn / giấy tờ"
+  },
+  {
+   "fieldname": "sec_lich",
+   "fieldtype": "Section Break",
+   "label": "Lịch tiếp theo"
+  },
+  {
+   "fieldname": "han_tiep",
+   "fieldtype": "Date",
+   "label": "Hạn / hẹn lần sau (ngày)",
+   "description": "Đăng kiểm: hạn mới — chu kỳ 6 tháng/1 năm/2 năm thì máy tự tính, 'Ngày cụ thể' thì nhập theo giấy chứng nhận. Bảo dưỡng: ngày gara hẹn (nếu có)."
+  },
+  {
+   "fieldname": "col_break_lich",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "km_tiep",
+   "fieldtype": "Int",
+   "label": "Hẹn lần sau (km)",
+   "description": "Bảo dưỡng: số km gara hẹn quay lại (nếu có)."
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "is_submittable": 0,
+ "links": [],
+ "modified": "2026-10-17 00:00:00",
+ "module": "Van Chuyen",
+ "name": "Nhat Ky Xe",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "ngay",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

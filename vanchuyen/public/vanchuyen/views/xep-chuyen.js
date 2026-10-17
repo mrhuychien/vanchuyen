@@ -33,6 +33,20 @@ function builderVol() {
 function poolPicked(si) {
 	return S.builder.rows.some((r) => r.sales_invoice === si);
 }
+// `get_vehicles` chỉ trả XE TẢI CÒN SỬ DỤNG. Nháp cũ có thể mang một xe nay đã đổi thành
+// xe con hoặc đã ngừng sử dụng: không chèn lại thì builder hiện "chưa chọn xe" trong khi
+// Lưu vẫn gửi xe cũ đi.
+function withDraftVehicle(list, xe, theTich) {
+	if (!xe || list.some((v) => v.name === xe)) return list;
+	return list.concat([{ name: xe, custom_the_tich_kha_dung: Number(theTich) || 0, canh_bao: [{ muc: "sap_den", text: "đã ẩn khỏi Xếp chuyến" }] }]);
+}
+// Cảnh báo GẤP của xe (server chỉ gửi việc gấp: đăng kiểm quá hạn / sắp hết, quá hạn
+// thay dầu). Hiện cái đầu trên nút, đủ cả trong tooltip — nút chọn xe không được rối.
+function vehicleWarn(v) {
+	const ws = v.canh_bao || [];
+	if (!ws.length) return "";
+	return `<small class="vc-chip-warn ${escapeHtml(ws[0].muc)}" title="${escapeHtml(ws.map((w) => w.text).join(" · "))}">⚠ ${escapeHtml(ws[0].text)}${ws.length > 1 ? " +" + (ws.length - 1) : ""}</small>`;
+}
 
 export async function render({ container }) {
 	ROOT = container;
@@ -326,10 +340,11 @@ function drawBuilder() {
 					(v) =>
 						`<button type="button" class="vc-chip-btn ${v.name === b.xe ? "active" : ""}" data-xe="${escapeHtml(v.name)}" aria-pressed="${v.name === b.xe ? "true" : "false"}">` +
 						`<span>${escapeHtml(v.name)}</span>` +
-						`${v.custom_the_tich_kha_dung ? `<small>${formatM3(v.custom_the_tich_kha_dung)} m³</small>` : ""}</button>`
+						`${v.custom_the_tich_kha_dung ? `<small>${formatM3(v.custom_the_tich_kha_dung)} m³</small>` : ""}` +
+						`${vehicleWarn(v)}</button>`
 				)
 				.join("")
-		: '<span class="vc-text-muted vc-text-sm">Chưa có xe khả dụng</span>';
+		: '<span class="vc-text-muted vc-text-sm">Chưa có xe tải — thêm ở <a href="#/quan-ly-xe">Quản lý xe</a></span>';
 	const laixeChips = S.drivers.length
 		? S.drivers
 				.map(
@@ -643,6 +658,7 @@ async function editDraft(name) {
 				gui_xe: s.gui_xe ? 1 : 0,
 			})),
 		};
+		S.vehicles = withDraftVehicle(S.vehicles, doc.xe, doc.the_tich_xe);
 		drawBuilder();
 		window.scrollTo({ top: 0, behavior: "smooth" });
 		showToast("Đã nạp nháp để sửa", "info");

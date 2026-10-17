@@ -173,6 +173,8 @@ def _stub_frappe():
     fu.cint = lambda v: int(float(v or 0))
     fu.nowdate = lambda: "2026-09-12"
     fu.now = lambda: "2026-09-12 00:00:00"
+    # `dieu_phoi` nạp `nhat_ky_xe` (lọc xe tải ở Xếp chuyến), module đó cần getdate.
+    fu.getdate = lambda v=None: __import__("datetime").date.fromisoformat(str(v or "2026-09-12")[:10])
     sys.modules["frappe.utils"] = fu
 
     fm = types.ModuleType("frappe.model")
