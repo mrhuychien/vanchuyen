@@ -4,7 +4,7 @@ import { escapeHtml } from "./lib/format.js";
 import { skeleton } from "./lib/dom.js";
 
 // Build marker (Luật vàng #2): so với VC_CONTEXT.shellBuild để phát hiện shell cũ do cache.
-const BUILD = "2026-07-13-p5";
+const BUILD = "2026-10-17-p6";
 window.APP = { build: BUILD };
 
 const CTX = window.VC_CONTEXT || {};
@@ -27,6 +27,9 @@ const ROUTES = [
 	{ path: "/nhap-don", module: "./views/nhap-don.js", label: "Nhập đơn", icon: "fa-file-invoice", roles: ["dieu_hanh"] },
 	{ path: "/tra-cuoc", module: "./views/tra-cuoc.js", label: "Trả cước", icon: "fa-money-bill-wave", roles: ["dieu_hanh"] },
 	{ path: "/su-co", module: "./views/su-co.js", label: "Sự cố", icon: "fa-triangle-exclamation", roles: ["dieu_hanh"] },
+	// Quản lý xe: cùng một module cho danh sách + chi tiết (params.id).
+	{ path: "/quan-ly-xe", module: "./views/quan-ly-xe.js", label: "Quản lý xe", icon: "fa-screwdriver-wrench", roles: ["dieu_phoi", "dieu_hanh", "admin"] },
+	{ path: "/quan-ly-xe/:id", module: "./views/quan-ly-xe.js", label: "Chi tiết xe", roles: ["dieu_phoi", "dieu_hanh", "admin"], hideNav: true },
 ];
 
 function canAccess(route) {
