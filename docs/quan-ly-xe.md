@@ -1,8 +1,8 @@
 # Quản lý xe — tab `#/quan-ly-xe` trên portal `/vc`
 
 Quản lý **xe tải / xe con**: lịch đăng kiểm, lịch thay dầu, nhật ký bảo dưỡng &
-sửa chữa (kèm chi phí, ảnh hoá đơn / giấy chứng nhận). **Chỉ xe tải** hiện ở màn
-Xếp chuyến — xe con ẩn cho đỡ rối.
+sửa chữa (kèm chi phí, ảnh hoá đơn / giấy chứng nhận). **Chỉ xe tải còn sử dụng**
+hiện ở màn Xếp chuyến — xe con và xe đã ngừng (bán, thanh lý, nằm gara lâu) ẩn cho đỡ rối.
 
 ## 1. Ai dùng
 
@@ -22,6 +22,8 @@ Guard: `api/guards.py::require_quan_ly_xe` — dòng đầu mọi method của `
 | fieldname | Loại | Ý nghĩa |
 |---|---|---|
 | `custom_loai_xe` | Select `Xe tải\nXe con`, mặc định `Xe tải` | **Trống = xe tải** (xe có trước trường này) |
+| `custom_ngung_su_dung` | Check | xe đã bán / thanh lý / nằm gara lâu — độc lập với loại xe |
+| `custom_ly_do_ngung` | Data | lý do ngừng (xoá khi dùng lại) |
 | `custom_ngay_cap_nhat_km` | Date, read-only | ngày đọc số km (`last_odometer`) gần nhất |
 | `custom_chu_ky_dang_kiem` | Select `6 tháng / 1 năm / 2 năm / Ngày cụ thể` | |
 | `custom_ngay_dang_kiem` | Date | lần đăng kiểm gần nhất |
@@ -58,11 +60,20 @@ lần lưu Vehicle của mọi app.
 
 ## 4. Xếp chuyến
 
-`dieu_phoi.get_vehicles` chỉ trả **xe tải** — lọc ở Python (`nhat_ky_xe.loai_xe`), KHÔNG lọc
-`!= 'Xe con'` trong SQL (NULL rơi mất → xe cũ biến khỏi Xếp chuyến). Nút chọn xe kèm cảnh báo
+`dieu_phoi.get_vehicles` chỉ trả **xe tải còn sử dụng** — lọc ở Python (`nhat_ky_xe.xep_chuyen_duoc`),
+KHÔNG lọc `!= 'Xe con'` trong SQL (NULL rơi mất → xe cũ biến khỏi Xếp chuyến). Chỉ xin những
+field meta đang có → chạy trước / giữa chừng `migrate` vẫn không sập. Nút chọn xe kèm cảnh báo
 **gấp**: đăng kiểm quá hạn / còn ≤ 7 ngày, quá hạn thay dầu. Nháp cũ mang xe nay là xe con vẫn
-hiện chip xe đó ("không phải xe tải") để người dùng thấy xe đang chọn. Server **không chặn**
-xe con trên chuyến — việc lọc là cho đỡ rối, không phải luật nghiệp vụ.
+hiện chip xe đó ("đã ẩn khỏi Xếp chuyến") để người dùng thấy xe đang chọn. Server **không chặn**
+xe con / xe ngừng trên chuyến — việc lọc là cho đỡ rối, không phải luật nghiệp vụ.
+
+### Ngừng sử dụng
+
+Nút **Ngừng sử dụng** ở trang xe (chọn nhanh lý do: Đã bán / Thanh lý / Nằm gara sửa lâu / Khác).
+Xe ngừng: ẩn khỏi Xếp chuyến, KHÔNG vào "Cần chú ý" (xe đã bán quá hạn đăng kiểm không phải
+việc của ai), nằm trong mục "Ngừng sử dụng" thu gọn cuối danh sách; lịch, nhật ký, chi phí giữ
+nguyên. Không đụng chuyến nào — nếu xe còn chuyến chưa hoàn thành, portal nhắc mã chuyến để
+đổi xe. **Dùng lại** là có lại ngay.
 
 ## 5. API (`vanchuyen/api/quan_ly_xe.py`)
 
@@ -72,6 +83,7 @@ xe con trên chuyến — việc lọc là cho đỡ rối, không phải luật
 | `get_vehicle(name)` | chi tiết + chi phí theo hạng mục + trang đầu nhật ký |
 | `list_logs(xe, loai, page, page_size)` | nhật ký, lọc hạng mục, phân trang server |
 | `save_vehicle(payload)` | thêm / sửa xe (loại, hãng, dòng, nhiên liệu, thể tích). Không sửa biển số, km, phụ phí xe |
+| `set_ngung_su_dung(xe, ngung, ly_do)` | ngừng / dùng lại; trả thêm `chuyen_dang_mo` (chuyến chưa hoàn thành của xe) |
 | `update_km(xe, km)` | ghi số km đồng hồ |
 | `save_lich(xe, hang_muc, payload)` | cài / sửa tay lịch đăng kiểm hoặc thay dầu |
 | `add_log / update_log / delete_log` | nhật ký (kèm cấu hình lịch khi ghi lần đầu) |
@@ -80,7 +92,7 @@ xe con trên chuyến — việc lọc là cho đỡ rối, không phải luật
 ## 6. Deploy
 
 ```bash
-bench --site <site> migrate          # tạo DocType Nhat Ky Xe + 11 custom field Vehicle
+bench --site <site> migrate          # tạo DocType Nhat Ky Xe + 13 custom field Vehicle
 bench build --app vanchuyen
 bench restart
 ```
@@ -96,7 +108,10 @@ Sau deploy vào **Quản lý xe** → đổi các xe con sang "Xe con" → cài 
 5. Ghi nhận đăng kiểm mới → lịch tiến; xoá bản ghi đó → lịch lùi về lần trước.
 6. Thay dầu mỗi 5.000 km, lần trước ở 120.000; cập nhật km 125.200 → "Quá 200 km", Xếp chuyến hiện "⚠ Quá hạn thay dầu".
 7. Ảnh hoá đơn tải lên xem lại được; chi phí năm cộng đúng.
-8. Sửa trên Desk (form Vehicle) chu kỳ đăng kiểm → hạn tự tính lại.
+8. Cho một xe tải **Ngừng sử dụng** (lý do "Đã bán") → biến khỏi Xếp chuyến và khỏi "Cần chú ý",
+   nằm trong mục "Ngừng sử dụng" cuối danh sách; xe còn chuyến chưa hoàn thành thì được nhắc mã
+   chuyến. **Dùng lại** → hiện lại ở Xếp chuyến.
+9. Sửa trên Desk (form Vehicle) chu kỳ đăng kiểm → hạn tự tính lại.
 
 ## 8. Kiểm không cần bench
 

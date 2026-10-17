@@ -196,6 +196,30 @@
  },
  {
   "doctype": "Custom Field",
+  "name": "Vehicle-custom_ngung_su_dung",
+  "dt": "Vehicle",
+  "fieldname": "custom_ngung_su_dung",
+  "label": "Ngừng sử dụng",
+  "fieldtype": "Check",
+  "default": "0",
+  "in_standard_filter": 1,
+  "description": "Xe đã bán / thanh lý / nằm gara lâu: ẩn khỏi Xếp chuyến và khỏi danh sách cần chú ý ở portal /vc. Lịch + nhật ký vẫn giữ.",
+  "insert_after": "custom_loai_xe",
+  "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Vehicle-custom_ly_do_ngung",
+  "dt": "Vehicle",
+  "fieldname": "custom_ly_do_ngung",
+  "label": "Lý do ngừng",
+  "fieldtype": "Data",
+  "depends_on": "eval:doc.custom_ngung_su_dung",
+  "insert_after": "custom_ngung_su_dung",
+  "module": "Van Chuyen"
+ },
+ {
+  "doctype": "Custom Field",
   "name": "Vehicle-custom_ngay_cap_nhat_km",
   "dt": "Vehicle",
   "fieldname": "custom_ngay_cap_nhat_km",

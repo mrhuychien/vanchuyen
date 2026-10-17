@@ -33,11 +33,12 @@ function builderVol() {
 function poolPicked(si) {
 	return S.builder.rows.some((r) => r.sales_invoice === si);
 }
-// `get_vehicles` chỉ trả XE TẢI. Nháp cũ có thể mang một xe nay đã đổi thành xe con:
-// không chèn lại thì builder hiện "chưa chọn xe" trong khi Lưu vẫn gửi xe cũ đi.
+// `get_vehicles` chỉ trả XE TẢI CÒN SỬ DỤNG. Nháp cũ có thể mang một xe nay đã đổi thành
+// xe con hoặc đã ngừng sử dụng: không chèn lại thì builder hiện "chưa chọn xe" trong khi
+// Lưu vẫn gửi xe cũ đi.
 function withDraftVehicle(list, xe, theTich) {
 	if (!xe || list.some((v) => v.name === xe)) return list;
-	return list.concat([{ name: xe, custom_the_tich_kha_dung: Number(theTich) || 0, canh_bao: [{ muc: "sap_den", text: "không phải xe tải" }] }]);
+	return list.concat([{ name: xe, custom_the_tich_kha_dung: Number(theTich) || 0, canh_bao: [{ muc: "sap_den", text: "đã ẩn khỏi Xếp chuyến" }] }]);
 }
 // Cảnh báo GẤP của xe (server chỉ gửi việc gấp: đăng kiểm quá hạn / sắp hết, quá hạn
 // thay dầu). Hiện cái đầu trên nút, đủ cả trong tooltip — nút chọn xe không được rối.

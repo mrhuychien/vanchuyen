@@ -15,7 +15,8 @@ màn hình vẫn xanh. Các cạm bẫy, mỗi cái một mục dưới đây:
      cuối tháng — và bản xem trước trong form (JS) phải ra CÙNG ngày với server.
   2. "TRỐNG = XE CON": xe tạo trước khi có `custom_loai_xe` mang NULL. Lọc bằng
      SQL `!= 'Xe con'` thì NULL rơi mất (so với NULL ra NULL) — toàn bộ đội xe
-     cũ biến khỏi Xếp chuyến ngay sau deploy, đúng màn dùng hằng ngày.
+     cũ biến khỏi Xếp chuyến ngay sau deploy, đúng màn dùng hằng ngày. Xe đã
+     NGỪNG SỬ DỤNG (bán, nằm gara) cũng phải ẩn — và không được réo ở "Cần chú ý".
   3. HẠN TÍNH THEO CHU KỲ CŨ NẰM LẠI: đổi chu kỳ 1 năm → 6 tháng mà hạn lưu
      không tính lại thì xe báo còn nửa năm trong khi đã quá hạn.
   4. NHẬP BÙ KÉO LÙI LỊCH: ghi một lần thay dầu năm ngoái không được đè mốc
@@ -74,14 +75,18 @@ class Throw(Exception):
 VEH = {}     # name -> field Vehicle
 LOGS = {}    # name -> bản ghi Nhat Ky Xe (dict)
 SEQ = [0]
-META_CO_FIELD = [True]
+META_THIEU = set()       # field CHƯA migrate (chưa có cột) — mô phỏng deploy lệch bước
+
+
+def _co_field(f):
+    return f not in META_THIEU
 
 
 def _reset():
     VEH.clear()
     LOGS.clear()
     SEQ[0] = 0
-    META_CO_FIELD[0] = True
+    META_THIEU.clear()
 
 
 def _stub_frappe():
@@ -104,6 +109,10 @@ def _stub_frappe():
 
     def get_all(dt, filters=None, fields=None, order_by=None, limit=None, **k):
         if dt == "Vehicle":
+            # Như MariaDB thật: xin cột CHƯA có (chưa migrate) là nổ, không lặng lẽ trả None.
+            thieu = [f for f in (fields or []) if not _co_field(f)]
+            if thieu:
+                raise Exception("(1054, \"Unknown column '%s' in 'field list'\")" % thieu[0])
             rows = [_D(dict(v, name=n)) for n, v in sorted(VEH.items())]
             return [_D({f: r.get(f) for f in (fields or ["name"])}) for r in rows]
         if dt == "Nhat Ky Xe":
@@ -128,7 +137,7 @@ def _stub_frappe():
 
     class _Meta:
         def has_field(self, f):
-            return META_CO_FIELD[0]
+            return _co_field(f)
 
     fr.get_meta = lambda dt: _Meta()
 
@@ -371,6 +380,8 @@ def main():
     VEH["29C-TAI"] = {"custom_loai_xe": "Xe tải", "custom_the_tich_kha_dung": 15,
                       "custom_chu_ky_dang_kiem": "Ngày cụ thể", "custom_han_dang_kiem": "2026-10-10"}
     VEH["30A-CON"] = {"custom_loai_xe": "Xe con"}
+    VEH["29C-BAN"] = {"custom_loai_xe": "Xe tải", "custom_ngung_su_dung": 1, "custom_ly_do_ngung": "Đã bán"}
+    VEH["29C-DUNG"] = {"custom_loai_xe": "Xe tải", "custom_ngung_su_dung": 0}
     dp = importlib.import_module("vanchuyen.api.dieu_phoi")
     dp.require_dieu_phoi = lambda *a, **k: None
     res = dp.get_vehicles()
@@ -378,19 +389,37 @@ def main():
     check("xe con KHÔNG có trong danh sách", "30A-CON" not in names, str(names))
     check("xe tạo trước khi có trường loại xe (NULL) VẪN còn", "29C-OLD" in names, str(names))
     check("xe loại '' vẫn còn", "29C-EMPTY" in names)
+    check("xe tải đã NGỪNG SỬ DỤNG (đã bán) KHÔNG có", "29C-BAN" not in names, str(names))
+    check("xe tải ghi rõ còn dùng (cờ = 0) vẫn có", "29C-DUNG" in names)
     by = {r["name"]: r for r in res}
     check("thể tích khả dụng vẫn trả về (thanh tải không vỡ)", by["29C-OLD"]["custom_the_tich_kha_dung"] == 12)
     check("xe tải quá hạn đăng kiểm mang cảnh báo 'ĐK quá hạn'",
           [w["text"] for w in by["29C-TAI"]["canh_bao"]] == ["ĐK quá hạn"], str(by["29C-TAI"]["canh_bao"]))
     check("xe không có lịch → không cảnh báo gì (màn không rối thêm)", by["29C-OLD"]["canh_bao"] == [])
-    META_CO_FIELD[0] = False
+    # "Chưa migrate" = đúng các field MỚI của Quản lý xe chưa có cột; field cũ của app
+    # (thể tích khả dụng) thì đã có từ lâu.
+    MOI = {"custom_loai_xe", "custom_ngung_su_dung", "custom_ly_do_ngung",
+           *[f for f in nk.TRUONG_LICH if f.startswith("custom_")]}
+    META_THIEU.update(MOI)
     try:
         old = dp.get_vehicles()
-        check("chạy TRƯỚC `bench migrate` (chưa có field): không sập, trả đủ xe như cũ",
-              len(old) == 4, str(len(old)))
+        check("chạy TRƯỚC `bench migrate` (chưa có field mới): không sập, trả đủ xe như cũ",
+              len(old) == len(VEH), f"{len(old)}/{len(VEH)}")
     except Exception as e:  # noqa: BLE001
-        check("chạy TRƯỚC `bench migrate` (chưa có field): không sập", False, repr(e)[:80])
-    META_CO_FIELD[0] = True
+        check("chạy TRƯỚC `bench migrate` (chưa có field mới): không sập", False, repr(e)[:80])
+    META_THIEU.clear()
+    META_THIEU.add("custom_ngung_su_dung")
+    try:
+        half = [r["name"] for r in dp.get_vehicles()]
+        check("migrate DỞ (có loại xe, chưa có cờ ngừng): không sập, vẫn ẩn xe con",
+              "30A-CON" not in half and "29C-OLD" in half, str(half))
+    except Exception as e:  # noqa: BLE001
+        check("migrate DỞ (có loại xe, chưa có cờ ngừng): không sập", False, repr(e)[:80])
+    META_THIEU.clear()
+    check("`xep_chuyen_duoc`: xe tải còn dùng ✓ · xe con ✗ · xe tải đã ngừng ✗ · trống ✓",
+          [nk.xep_chuyen_duoc(v) for v in ({"custom_loai_xe": "Xe tải"}, {"custom_loai_xe": "Xe con"},
+                                           {"custom_loai_xe": "Xe tải", "custom_ngung_su_dung": 1}, {})]
+          == [True, False, False, True])
     cb = nk.canh_bao_xep_chuyen
     check("ĐK còn 5 ngày → 'ĐK còn 5 ngày'",
           [w["text"] for w in cb({"dang_kiem": {"muc": "sap_den", "con_ngay": 5}})] == ["ĐK còn 5 ngày"])
@@ -541,6 +570,7 @@ def main():
         "vanchuyen/public/vanchuyen/views/quan-ly-xe.js", JS_STUBS,
         "const XS=%s;console.log(JSON.stringify({card:xeCard(XS[0]),con:xeCard(XS[2]),"
         "viec:canChuY([XS[2],XS[1],XS[0]]).map(v=>v.xe+'|'+v.hang_muc+'|'+v.muc),"
+        "ngung:canChuY([{...XS[0],ngung_su_dung:1}]).length,ban:xeCard({...XS[0],ngung_su_dung:1,ly_do_ngung:'Đã bán'}),"
         "doc:logCard({name:'N1',loai:'Sửa chữa',ngay:'2026-10-01',dinh_kem:'javascript:alert(1)'}),"
         "anh:logCard({name:'N2',loai:'Sửa chữa',ngay:'2026-10-01',dinh_kem:'/files/a.jpg'})}));"
         % json.dumps([xe_qua, xe_sap, xe_con], ensure_ascii=False))
@@ -554,6 +584,10 @@ def main():
         check("ảnh đính kèm `javascript:` KHÔNG thành link/ảnh (sửa được trên Desk → XSS khi bấm)",
               "javascript:" not in out["doc"] and "<img" not in out["doc"])
         check("ảnh /files/… vẫn hiện bình thường", 'src="/files/a.jpg"' in out["anh"])
+        check("xe NGỪNG SỬ DỤNG quá hạn đăng kiểm KHÔNG vào 'Cần chú ý'", out["ngung"] == 0, str(out["ngung"]))
+        check("thẻ xe ngừng: xám (class off), không viền đỏ, ghi lý do",
+              "vc-xe-card off" in out["ban"] and "qua_han\"" not in out["ban"].split(">")[0]
+              and "Ngừng sử dụng · Đã bán" in out["ban"], out["ban"].split(">")[0][:90])
         check("'Cần chú ý': việc QUÁ HẠN lên đầu, xe ổn không có mặt",
               out["viec"] == ["29C-111.11|Đăng kiểm|qua_han", "29C-222.22|Đăng kiểm|sap_den"], str(out["viec"]))
     out, err = run_node(
@@ -598,8 +632,8 @@ def main():
 
     print("=" * 78)
     if ok_all:
-        print("KẾT QUẢ: ĐẠT — lịch tính đúng ngày, tiến/lùi đúng theo nhật ký, "
-              "và Xếp chuyến chỉ còn xe tải (kể cả xe cũ chưa có loại).")
+        print("KẾT QUẢ: ĐẠT — lịch tính đúng ngày, tiến/lùi đúng theo nhật ký, và Xếp chuyến "
+              "chỉ còn xe tải còn sử dụng (kể cả xe cũ chưa có loại).")
         return 0
     print("KẾT QUẢ: CÓ MỤC KHÔNG ĐẠT ❌")
     return 1

@@ -38,8 +38,9 @@ const MUC = {
 };
 // Km đọc cũ hơn ngần này ngày thì nhắc: "còn X km" tính trên số km cũ.
 const KM_CU_NGAY = 14;
+const LY_DO_NGUNG = ["Đã bán", "Thanh lý", "Nằm gara sửa lâu", "Khác"];
 
-const S = { data: null, filter: "all", xe: null, logLoai: "", logs: null };
+const S = { data: null, filter: "all", moNgung: false, xe: null, logLoai: "", logs: null };
 let ROOT = null;
 
 export async function render({ container, params }) {
@@ -173,10 +174,13 @@ async function renderList() {
 	drawList();
 }
 
-// Việc cần làm: mọi mục lịch quá hạn / sắp đến hạn, gấp nhất lên đầu.
+// Việc cần làm: mọi mục lịch quá hạn / sắp đến hạn, gấp nhất lên đầu. Xe NGỪNG SỬ DỤNG
+// không vào đây: xe đã bán mà hết hạn đăng kiểm không phải việc của ai — để nó nằm
+// đó là dạy người dùng lờ khối cảnh báo, rồi lờ luôn cả việc thật.
 export function canChuY(xs) {
 	const out = [];
 	for (const x of xs || []) {
+		if (x.ngung_su_dung) continue;
 		const items = [
 			["Đăng kiểm", x.dang_kiem, nhanDangKiem],
 			["Thay dầu", x.thay_dau, (it) => nhanThayDau(it, x)],
@@ -227,24 +231,31 @@ function pill(key, label) {
 
 function drawList() {
 	const xs = S.data.xe || [];
-	const tai = xs.filter((x) => x.loai_xe === XE_TAI);
-	const con = xs.filter((x) => x.loai_xe === XE_CON);
-	const shown = S.filter === "tai" ? tai : S.filter === "con" ? con : xs;
+	// Xe ngừng sử dụng không đếm vào nhóm, không lẫn vào danh sách chính: gom vào mục
+	// thu gọn cuối trang (vẫn lọc theo loại như danh sách chính).
+	const dung = xs.filter((x) => !x.ngung_su_dung);
+	const ngung = xs.filter((x) => x.ngung_su_dung);
+	const theoLoai = (arr) =>
+		S.filter === "tai" ? arr.filter((x) => x.loai_xe === XE_TAI) : S.filter === "con" ? arr.filter((x) => x.loai_xe === XE_CON) : arr;
+	const tai = dung.filter((x) => x.loai_xe === XE_TAI);
+	const con = dung.filter((x) => x.loai_xe === XE_CON);
+	const shown = theoLoai(dung);
+	const shownNgung = theoLoai(ngung);
 	const cp = xs.reduce((a, x) => a + (Number(x.chi_phi_nam) || 0), 0);
 	ROOT.innerHTML = `
 		<div class="vc-view-banner">
 			<div>
 				<div class="vc-view-banner-title">Quản lý xe</div>
 				<div class="vc-view-banner-subtitle">${tai.length} xe tải · ${con.length} xe con${
-					cp ? ` · chi phí ${S.data.nam}: ${escapeHtml(formatCurrency(cp))}` : ""
-				}</div>
+					ngung.length ? ` · ${ngung.length} ngừng sử dụng` : ""
+				}${cp ? ` · chi phí ${S.data.nam}: ${escapeHtml(formatCurrency(cp))}` : ""}</div>
 			</div>
 			<div class="vc-view-banner-badge"><i class="fas fa-screwdriver-wrench"></i></div>
 		</div>
-		${viecHtml(canChuY(xs), xs.length)}
+		${viecHtml(canChuY(xs), dung.length)}
 		<div class="vc-xe-toolbar">
 			<div class="vc-pill-nav" style="margin:0">
-				${pill("all", `Tất cả (${xs.length})`)}${pill("tai", `🚚 Xe tải (${tai.length})`)}${pill("con", `🚗 Xe con (${con.length})`)}
+				${pill("all", `Tất cả (${dung.length})`)}${pill("tai", `🚚 Xe tải (${tai.length})`)}${pill("con", `🚗 Xe con (${con.length})`)}
 			</div>
 			<button class="vc-btn-primary" id="qx-add"><i class="fas fa-plus"></i> Thêm xe</button>
 		</div>
@@ -254,10 +265,18 @@ function drawList() {
 				shown.length
 					? shown.map(xeCard).join("")
 					: `<div class="vc-empty"><div class="vc-empty-icon">🚚</div><div class="vc-empty-title">${
-							xs.length ? "Không có xe nào trong nhóm này" : "Chưa có xe nào"
+							!xs.length ? "Chưa có xe nào" : dung.length ? "Không có xe nào trong nhóm này" : "Không có xe nào đang dùng"
 						}</div></div>`
 			}
-		</div>`;
+		</div>
+		${
+			shownNgung.length
+				? `<details class="vc-xe-ngung" id="qx-ngung-box" ${S.moNgung ? "open" : ""}>
+					<summary>⛔ Ngừng sử dụng (${shownNgung.length})</summary>
+					<div class="vc-list vc-xe-list">${shownNgung.map(xeCard).join("")}</div>
+				</details>`
+				: ""
+		}`;
 
 	ROOT.querySelectorAll("[data-filter]").forEach((b) =>
 		b.addEventListener("click", () => {
@@ -266,6 +285,8 @@ function drawList() {
 		})
 	);
 	ROOT.querySelector("#qx-add").addEventListener("click", () => openXeForm(null));
+	const box = ROOT.querySelector("#qx-ngung-box");
+	if (box) box.addEventListener("toggle", () => (S.moNgung = box.open));
 	bindOpen(ROOT);
 }
 
@@ -302,12 +323,14 @@ export function xeCard(x) {
 		.filter(Boolean)
 		.join(" · ");
 	const bd = x.bao_duong && x.bao_duong.muc ? lichRow("🔧 Bảo dưỡng", x.bao_duong, nhanBaoDuong(x.bao_duong)) : "";
+	// Xe ngừng: thẻ xám, chữ trạng thái tắt màu, không viền đỏ — lịch vẫn đọc được nếu cần.
 	return `
-	<div class="vc-order-card vc-selectable vc-xe-card ${worstMuc(x)}" data-open="${escapeHtml(x.name)}" role="button" tabindex="0">
+	<div class="vc-order-card vc-selectable vc-xe-card ${x.ngung_su_dung ? "off" : worstMuc(x)}" data-open="${escapeHtml(x.name)}" role="button" tabindex="0">
 		<div class="vc-order-head">
 			<div>
 				<div class="vc-order-cust">${x.loai_xe === XE_CON ? "🚗" : "🚚"} ${escapeHtml(x.name)}</div>
 				<div class="vc-order-addr">${escapeHtml(meta)}</div>
+				${x.ngung_su_dung ? `<div class="vc-xe-off-ly-do">⛔ Ngừng sử dụng${x.ly_do_ngung ? " · " + escapeHtml(x.ly_do_ngung) : ""}</div>` : ""}
 			</div>
 			<span class="vc-badge ${x.loai_xe === XE_CON ? "vc-badge-muted" : "vc-badge-primary"}">${escapeHtml(x.loai_xe)}</span>
 		</div>
@@ -455,9 +478,19 @@ function drawDetail() {
 			<a class="vc-btn-ghost" href="#/quan-ly-xe"><i class="fas fa-list"></i> Danh sách</a>
 			<button class="vc-btn-ghost" id="qx-edit"><i class="fas fa-pen"></i> Sửa thông tin</button>
 			<button class="vc-btn-ghost" id="qx-km"><i class="fas fa-gauge-high"></i> Cập nhật km</button>
+			${x.ngung_su_dung ? "" : `<button class="vc-btn-ghost vc-xe-del" id="qx-ngung"><i class="fas fa-ban"></i> Ngừng sử dụng</button>`}
 		</div>
+		${
+			x.ngung_su_dung
+				? `<div class="vc-xe-off-banner vc-mb-3">
+					<div><b>⛔ Xe đã ngừng sử dụng</b>${x.ly_do_ngung ? " — " + escapeHtml(x.ly_do_ngung) : ""}</div>
+					<div class="vc-text-sm vc-mt-1">Không hiện ở Xếp chuyến, không vào "Cần chú ý". Lịch, nhật ký, chi phí vẫn giữ nguyên.</div>
+					<button class="vc-btn-primary vc-mt-2" id="qx-dung-lai"><i class="fas fa-rotate-left"></i> Dùng lại</button>
+				</div>`
+				: ""
+		}
 		${kmCu(x) ? `<div class="vc-xe-warn vc-mb-3">⚠️ Số km đọc đã ${x.km_cu_ngay} ngày — nhắc thay dầu theo km có thể trễ. Bấm <b>Cập nhật km</b>.</div>` : ""}
-		${x.loai_xe === XE_CON ? `<div class="vc-text-sm vc-text-muted vc-mb-2">Xe con — không hiện ở màn Xếp chuyến.</div>` : ""}
+		${x.loai_xe === XE_CON && !x.ngung_su_dung ? `<div class="vc-text-sm vc-text-muted vc-mb-2">Xe con — không hiện ở màn Xếp chuyến.</div>` : ""}
 		<div class="vc-two-col">
 			<div>${dkCard(x)}${tdCard(x)}${bdCard(x)}</div>
 			<div>
@@ -474,6 +507,10 @@ function drawDetail() {
 
 	ROOT.querySelector("#qx-edit").addEventListener("click", () => openXeForm(x));
 	ROOT.querySelector("#qx-km").addEventListener("click", () => openKm(x));
+	const nutNgung = ROOT.querySelector("#qx-ngung");
+	if (nutNgung) nutNgung.addEventListener("click", () => openNgung(x));
+	const nutDungLai = ROOT.querySelector("#qx-dung-lai");
+	if (nutDungLai) nutDungLai.addEventListener("click", () => dungLai(x));
 	ROOT.querySelectorAll("[data-ghi]").forEach((b) => b.addEventListener("click", () => openGhiNhan(b.dataset.ghi, null)));
 	ROOT.querySelectorAll("[data-lich]").forEach((b) =>
 		b.addEventListener("click", () => (b.dataset.lich === "Đăng kiểm" ? openLichDK(x) : openLichTD(x)))
@@ -629,6 +666,53 @@ function openXeForm(x) {
 			}
 		})
 	);
+}
+
+function openNgung(x) {
+	const body = `
+		<p class="vc-confirm-msg vc-mb-2">Xe <b>${escapeHtml(x.name)}</b> sẽ ẩn khỏi Xếp chuyến và không vào "Cần chú ý".
+			Lịch, nhật ký, chi phí vẫn giữ — bấm <b>Dùng lại</b> là có lại ngay.</p>
+		<div class="vc-field"><label>Lý do</label>
+			<div class="vc-chip-group" id="qx-ld">${LY_DO_NGUNG.map((l) => chip(l, false, "ld")).join("")}</div></div>
+		<div class="vc-field"><input class="vc-input" id="qx-ld-text" maxlength="140" placeholder="Ghi thêm (không bắt buộc)" /></div>`;
+	const footer = `<button class="vc-btn-ghost" data-vc-close>Hủy</button><button class="vc-btn-danger" id="qx-ngung-save">Ngừng sử dụng</button>`;
+	const content = showModal({ title: `Ngừng sử dụng · ${escapeHtml(x.name)}`, body, footer });
+	if (!content) return;
+	const q = (id) => content.querySelector("#" + id);
+	bindChips(content, "ld", (v) => {
+		q("qx-ld-text").value = v === "Khác" ? "" : v;
+		if (v === "Khác") q("qx-ld-text").focus();
+	});
+	q("qx-ngung-save").addEventListener("click", () =>
+		runSave(q("qx-ngung-save"), async () => {
+			const res = await call(API + "set_ngung_su_dung", { xe: x.name, ngung: 1, ly_do: q("qx-ld-text").value.trim() });
+			closeModal();
+			showToast(`Đã ngừng sử dụng xe ${x.name}`, "success");
+			// Không đụng chuyến nào — nhưng chuyến còn mở trên xe này thì phải nói ra để đổi xe.
+			const mo = res.chuyen_dang_mo || [];
+			if (mo.length) showToast(`Xe còn ${mo.length} chuyến chưa hoàn thành: ${mo.join(", ")} — đổi xe ở Xếp chuyến nếu cần.`, "warning");
+			capNhatXe(res);
+		})
+	);
+}
+
+function dungLai(x) {
+	confirmDialog({
+		title: "Dùng lại xe",
+		message: `Dùng lại xe <b>${escapeHtml(x.name)}</b>? ${
+			x.loai_xe === XE_TAI ? "Xe hiện lại ở Xếp chuyến và trong \"Cần chú ý\"." : "Xe vào lại \"Cần chú ý\"."
+		}`,
+		okText: "Dùng lại",
+		onOk: async () => {
+			try {
+				const res = await call(API + "set_ngung_su_dung", { xe: x.name, ngung: 0 });
+				showToast(`Đã dùng lại xe ${x.name}`, "success");
+				capNhatXe(res);
+			} catch (e) {
+				showToast(errText(e), "error");
+			}
+		},
+	});
 }
 
 function openKm(x) {

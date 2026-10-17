@@ -14,7 +14,7 @@ xe: "hẹn lần sau" đọc thẳng từ bản ghi bảo dưỡng mới nhất.
 sử + chi phí.
 
 ⚠ Các khái niệm khai ở ĐÚNG MỘT CHỖ này — chu kỳ, cộng tháng, "trống = xe tải",
-mức cảnh báo. API portal (`api/quan_ly_xe.py`), màn Xếp chuyến
+xe nào được xếp chuyến (xe tải còn sử dụng), mức cảnh báo. API portal (`api/quan_ly_xe.py`), màn Xếp chuyến
 (`dieu_phoi.get_vehicles`) và doc_events của Vehicle đều gọi lại đây. Phần thuần
 (không đụng DB) được `docs/verified/quan_ly_xe_check.py` chạy không cần bench.
 """
@@ -98,6 +98,22 @@ def loai_xe(v):
 	mất khỏi Xếp chuyến ngay sau khi deploy — đúng màn dùng hằng ngày.
 	"""
 	return XE_CON if (v or "").strip() == XE_CON else XE_TAI
+
+
+def ngung_su_dung(v):
+	"""Xe đã NGỪNG SỬ DỤNG (bán, thanh lý, nằm gara lâu) — `v` là dict field Vehicle.
+	Lịch + nhật ký vẫn giữ: dùng lại là có ngay, chi phí năm vẫn tính đủ."""
+	return bool(cint((v or {}).get("custom_ngung_su_dung")))
+
+
+def xep_chuyen_duoc(v):
+	"""Xe có hiện ở màn Xếp chuyến không: XE TẢI (trống = xe tải) và CÒN sử dụng.
+
+	Chỉ là lọc cho đỡ rối, KHÔNG phải luật chặn: server không cấm chuyến mang xe
+	con / xe đã ngừng (chuyến cũ vẫn mở, sửa, hoàn thành được bình thường).
+	"""
+	v = v or {}
+	return loai_xe(v.get("custom_loai_xe")) == XE_TAI and not ngung_su_dung(v)
 
 
 def cong_thang(d, so_thang):

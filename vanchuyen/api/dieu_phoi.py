@@ -127,34 +127,34 @@ def get_drivers():
 
 @frappe.whitelist()
 def get_vehicles():
-	"""Xe cho builder: CHỈ XE TẢI (xe con không chở hàng — ẩn cho đỡ rối), kèm thể
-	tích khả dụng + cảnh báo gấp (đăng kiểm quá hạn / sắp hết, quá hạn thay dầu).
+	"""Xe cho builder: CHỈ XE TẢI CÒN SỬ DỤNG (xe con, xe đã bán / nằm gara — ẩn cho đỡ
+	rối), kèm thể tích khả dụng + cảnh báo gấp (đăng kiểm quá hạn / sắp hết, quá hạn
+	thay dầu). Khái niệm "được xếp chuyến" khai ở `nhat_ky_xe.xep_chuyen_duoc`.
 
-	Lọc loại xe ở PYTHON, không ở SQL: `custom_loai_xe != 'Xe con'` trong SQL loại
-	luôn dòng NULL (so với NULL ra NULL) — đúng những xe CŨ có trước trường này sẽ
-	biến mất khỏi màn dùng hằng ngày. `nhat_ky_xe.loai_xe` coi trống = xe tải."""
+	Lọc ở PYTHON, không ở SQL: `custom_loai_xe != 'Xe con'` trong SQL loại luôn dòng
+	NULL (so với NULL ra NULL) — đúng những xe CŨ có trước trường này sẽ biến mất
+	khỏi màn dùng hằng ngày.
+
+	Chỉ xin những field meta ĐANG CÓ: code mới chạy trước `bench migrate` (hoặc mới
+	migrate một nửa) thì field thiếu đọc ra None = xe tải, còn dùng, không lịch —
+	tức hành vi cũ, không làm sập Xếp chuyến vì `Unknown column`."""
 	require_dieu_phoi()
+	meta = frappe.get_meta("Vehicle")
 	fields = ["name", "make", "model", "custom_the_tich_kha_dung"]
-	if not frappe.get_meta("Vehicle").has_field("custom_loai_xe"):
-		# Code mới chạy trước `bench migrate`: giữ hành vi cũ, không làm sập Xếp chuyến.
-		return frappe.get_all("Vehicle", fields=fields, order_by="name asc")
-
-	rows = frappe.get_all("Vehicle", fields=fields + ["custom_loai_xe", *nk.TRUONG_LICH], order_by="name asc")
+	fields += [f for f in ("custom_loai_xe", "custom_ngung_su_dung", *nk.TRUONG_LICH) if meta.has_field(f)]
+	rows = frappe.get_all("Vehicle", fields=fields, order_by="name asc")
 	hom_nay = nk._d(nowdate())
-	out = []
-	for r in rows:
-		if nk.loai_xe(r.custom_loai_xe) == nk.XE_CON:
-			continue
-		out.append(
-			{
-				"name": r.name,
-				"make": r.make,
-				"model": r.model,
-				"custom_the_tich_kha_dung": flt(r.custom_the_tich_kha_dung),
-				"canh_bao": nk.canh_bao_xep_chuyen(nk.lich_cua_xe(r, hom_nay)),
-			}
-		)
-	return out
+	return [
+		{
+			"name": r.name,
+			"make": r.make,
+			"model": r.model,
+			"custom_the_tich_kha_dung": flt(r.get("custom_the_tich_kha_dung")),
+			"canh_bao": nk.canh_bao_xep_chuyen(nk.lich_cua_xe(r, hom_nay)),
+		}
+		for r in rows
+		if nk.xep_chuyen_duoc(r)
+	]
 
 
 @frappe.whitelist()

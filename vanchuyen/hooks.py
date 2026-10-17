@@ -52,6 +52,8 @@ fixtures = [
                     "Sales Invoice-custom_su_co_tom_tat",
                     # Quản lý xe (#/quan-ly-xe): loại xe + lịch đăng kiểm / thay dầu trên Vehicle.
                     "Vehicle-custom_loai_xe",
+                    "Vehicle-custom_ngung_su_dung",
+                    "Vehicle-custom_ly_do_ngung",
                     "Vehicle-custom_ngay_cap_nhat_km",
                     "Vehicle-custom_sec_lich_xe",
                     "Vehicle-custom_chu_ky_dang_kiem",

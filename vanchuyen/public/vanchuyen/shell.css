@@ -1464,6 +1464,41 @@
 .vc-xe-del {
 	color: var(--vc-danger);
 }
+/* Xe ngừng sử dụng: thẻ xám, chữ trạng thái tắt màu (không báo động cho xe đã bán). */
+.vc-xe-card.off {
+	background: var(--vc-surface-2);
+	opacity: 0.8;
+}
+.vc-xe-card.off .vc-xe-muc {
+	color: var(--vc-text-3);
+	font-weight: 600;
+}
+.vc-xe-off-ly-do {
+	font-size: 0.78rem;
+	font-weight: 700;
+	color: #475569;
+	margin-top: 2px;
+}
+.vc-xe-ngung {
+	margin-top: 1rem;
+}
+.vc-xe-ngung > summary {
+	cursor: pointer;
+	padding: 0.5rem 0;
+	font-size: 0.72rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	color: var(--vc-text-3);
+}
+.vc-xe-off-banner {
+	background: #f1f5f9;
+	border: 1px solid #cbd5e1;
+	color: #334155;
+	border-radius: var(--vc-radius-md);
+	padding: 0.75rem 0.9rem;
+	font-size: 0.88rem;
+}
 /* Cảnh báo gấp trên nút chọn xe ở Xếp chuyến (đè `.vc-chip-btn small`). */
 .vc-chip-btn .vc-chip-warn {
 	color: #b91c1c;

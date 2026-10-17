@@ -18,7 +18,10 @@ from vanchuyen.api.guards import require_quan_ly_xe
 from vanchuyen.van_chuyen.doctype.nhat_ky_xe import nhat_ky_xe as nk
 
 # Field Vehicle đọc cho portal — MỘT hằng để danh sách và chi tiết không lệch nhau.
-_VEHICLE_FIELDS = ("name", "make", "model", "fuel_type", "custom_loai_xe", "custom_the_tich_kha_dung") + nk.TRUONG_LICH
+_VEHICLE_FIELDS = (
+	"name", "make", "model", "fuel_type", "custom_loai_xe", "custom_ngung_su_dung", "custom_ly_do_ngung",
+	"custom_the_tich_kha_dung",
+) + nk.TRUONG_LICH
 
 _LOG_FIELDS = (
 	"name", "xe", "loai", "ngay", "so_km", "chi_phi", "noi_thuc_hien", "noi_dung",
@@ -42,9 +45,15 @@ def _payload(p):
 
 def _require_schema():
 	# Frappe BỎ QUA IM LẶNG key không có trong meta: chưa migrate mà ghi custom field
-	# thì "lưu thành công" mà không lưu gì. Báo thẳng thay vì để mất dữ liệu.
-	if not frappe.get_meta("Vehicle").has_field("custom_loai_xe"):
-		frappe.throw(_("Chưa có các trường Quản lý xe trên Vehicle — chạy `bench --site <site> migrate` rồi thử lại."))
+	# thì "lưu thành công" mà không lưu gì. Báo thẳng thay vì để mất dữ liệu. Soát MỌI
+	# custom field màn này đọc — không chỉ một cái: deploy lần sau thêm field mới mà
+	# quên migrate thì cũng phải báo ở đây, không phải nổ `Unknown column` ở SQL.
+	meta = frappe.get_meta("Vehicle")
+	thieu = [f for f in _VEHICLE_FIELDS if f.startswith("custom_") and not meta.has_field(f)]
+	if thieu:
+		frappe.throw(
+			_("Vehicle chưa có trường {0} — chạy `bench --site <site> migrate` rồi thử lại.").format(", ".join(thieu))
+		)
 
 
 def _require_xe(name):
@@ -81,6 +90,8 @@ def _xe_dict(v, hom_nay, bao_duong=None, chi_phi_nam=0.0):
 		"model": v.model,
 		"fuel_type": v.fuel_type,
 		"loai_xe": nk.loai_xe(v.get("custom_loai_xe")),
+		"ngung_su_dung": 1 if nk.ngung_su_dung(v) else 0,
+		"ly_do_ngung": v.get("custom_ly_do_ngung") or "",
 		"the_tich": flt(v.get("custom_the_tich_kha_dung")),
 		"km": cint(v.get("last_odometer")),
 		"ngay_km": nk._iso(ngay_km),
@@ -155,8 +166,9 @@ def _chi_tiet(name):
 # ════════════════════════════════════════════════════════════════════════════
 @frappe.whitelist()
 def list_vehicles():
-	"""Mọi xe (tải + con) kèm lịch đăng kiểm / thay dầu / hẹn bảo dưỡng, mức cảnh
-	báo và chi phí năm nay. Xe tải trước, rồi theo biển số."""
+	"""Mọi xe (tải + con, kể cả xe đã ngừng) kèm lịch đăng kiểm / thay dầu / hẹn bảo
+	dưỡng, mức cảnh báo và chi phí năm nay. Xe còn dùng trước, xe tải trước, rồi
+	theo biển số. Xe ngừng vẫn trả đủ lịch — portal tự không đưa vào "Cần chú ý"."""
 	require_quan_ly_xe()
 	_require_schema()
 	rows = frappe.get_all("Vehicle", fields=list(_VEHICLE_FIELDS), order_by="name asc")
@@ -165,7 +177,7 @@ def list_vehicles():
 	bd = nk.bao_duong_moi_nhat(names)
 	cp = _chi_phi_nam(hom_nay.year)
 	out = [_xe_dict(r, hom_nay, bd.get(r.name), cp.get(r.name, 0.0)) for r in rows]
-	out.sort(key=lambda x: (0 if x["loai_xe"] == nk.XE_TAI else 1, x["name"]))
+	out.sort(key=lambda x: (x["ngung_su_dung"], 0 if x["loai_xe"] == nk.XE_TAI else 1, x["name"]))
 	return {"hom_nay": hom_nay.isoformat(), "nam": hom_nay.year, "xe": out}
 
 
@@ -271,6 +283,36 @@ def save_vehicle(payload):
 		doc.custom_the_tich_kha_dung = the_tich
 	_luu_xe(doc)
 	return _chi_tiet(doc.name)
+
+
+@frappe.whitelist()
+def set_ngung_su_dung(xe, ngung, ly_do=None):
+	"""Ngừng sử dụng / dùng lại một xe (bán, thanh lý, nằm gara lâu).
+
+	Xe ngừng: ẩn khỏi Xếp chuyến, portal không đưa vào "Cần chú ý". Lịch + nhật ký
+	GIỮ NGUYÊN — dùng lại là có ngay. KHÔNG đụng chuyến nào: chuyến đang mở vẫn chạy
+	tiếp; chỉ trả danh sách đó về (`chuyen_dang_mo`) để portal nhắc đổi xe."""
+	require_quan_ly_xe()
+	_require_schema()
+	_require_xe(xe)
+	ngung = 1 if cint(ngung) else 0
+	doc = frappe.get_doc("Vehicle", xe)
+	doc.custom_ngung_su_dung = ngung
+	# Lý do chỉ có nghĩa khi đang ngừng; dùng lại thì xoá để lần ngừng sau không mang lý do cũ.
+	doc.custom_ly_do_ngung = (ly_do or "").strip()[:140] if ngung else ""
+	_luu_xe(doc)
+	out = _chi_tiet(xe)
+	out["chuyen_dang_mo"] = (
+		frappe.get_all(
+			"Chuyen Xe",
+			filters={"xe": xe, "docstatus": ["<", 2], "trang_thai": ["!=", "Hoàn thành"]},
+			pluck="name",
+			order_by="ngay_giao asc",
+		)
+		if ngung
+		else []
+	)
+	return out
 
 
 @frappe.whitelist()
