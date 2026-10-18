@@ -28,6 +28,10 @@ SÁU CÁI LỖ MÀ BỘ KIỂM NÀY CANH
    Khôi phục về ĐÚNG chặng cũ. Kế toán đã mở phiếu kiểm thì không hủy được (cả trên Desk),
    và `huy_lo` đọc KHÓA để không chạy đua với "Bắt đầu kiểm" bên ketoan. Danh sách: "Đang
    mở" bỏ lô hủy, lô hủy xếp CUỐI (FIELD() trả 0 cho giá trị lạ = lên đầu).
+8. **Hủy TẠI CHỖ đi sai đường.** Chỉ từ "Tạo yêu cầu" (đã có người đi lấy thì không còn là
+   hủy tại chỗ), chỉ lùi về "Tạo yêu cầu", có dấu ai / lúc nào, không đóng mốc lấy / nhận;
+   chặng tổng đứng ở "Đã kiểm hàng" (nhận đủ theo phiếu) chờ kế toán; kế toán đã mở phiếu
+   thì không lùi / không chuyển được nữa (cả trên Desk).
 
 Kèm hai luật vỏ portal: mọi module trong lib/ + components/ có trong import map
 (Luật vàng #1 frappe-portal-spa), và BUILD của shell khớp SHELL_BUILD của server.
@@ -492,6 +496,65 @@ def main():
           "Đã hủy" in fields["trang_thai"]["options"].split("\n")
           and all(fields.get(f, {}).get("read_only") for f in ("ly_do_huy", "huy_boi", "huy_luc", "huy_tu")))
     check("màn hình dùng ĐÚNG chữ 'Đã hủy' của server", lo_mod.DA_HUY == "Đã hủy" and 'export const DA_HUY = "Đã hủy";' in ui)
+
+    # ── 9 ──────────────────────────────────────────────────────────────────
+    print("-" * 78)
+    print("── 9. Hủy TẠI CHỖ: đi tắt Tạo yêu cầu -> 'Đã kiểm hàng' (nhận đủ theo phiếu) ")
+    KIEM.clear()
+    d = lo(lay_luc=None, lay_boi=None, nhan_luc=None, nhan_boi=None, huy_tai_cho_luc=None, huy_tai_cho_boi=None)
+    api._dat_chang(d, "Hủy tại chỗ")
+    check("Tạo yêu cầu -> Hủy tại chỗ: có dấu ai / lúc nào, KHÔNG đóng mốc lấy / nhận hàng",
+          d.trang_thai == "Hủy tại chỗ" and d.huy_tai_cho_luc and d.huy_tai_cho_boi == "Người bấm"
+          and not (d.lay_luc or d.nhan_luc), str((d.trang_thai, d.huy_tai_cho_luc, d.lay_luc)))
+    check("lô hủy tại chỗ KHÔNG đi tiếp chặng vận chuyển (lấy / nhận)",
+          raises(lambda: api._dat_chang(d, "Đã lấy hàng")) is not None and raises(lambda: api._dat_chang(d, "Đã nhận hàng")) is not None)
+    api._dat_chang(d, "Tạo yêu cầu")
+    check("lùi Hủy tại chỗ -> Tạo yêu cầu: bỏ dấu hủy tại chỗ", d.trang_thai == "Tạo yêu cầu" and not d.huy_tai_cho_luc)
+    d2 = lo(trang_thai="Đã lấy hàng", lay_luc="2026-10-17 08:00:00")
+    check("đã có người đi lấy (Đã lấy hàng) -> KHÔNG chuyển sang Hủy tại chỗ được",
+          "Tạo yêu cầu" in (raises(lambda: api._dat_chang(d2, "Hủy tại chỗ")) or ""))
+    d = lo(trang_thai="Hủy tại chỗ")
+    d.before_validate()
+    check("controller nhận trạng thái 'Hủy tại chỗ'", raises(d.validate) is None)
+    TABLES.add("Kiem Hang Thu Hoi")
+    KIEM["TH-2026-0001"] = "Đã kiểm hàng"
+    d = lo(trang_thai="Tạo yêu cầu", _before=lo(trang_thai="Hủy tại chỗ"))
+    d.before_validate()
+    check("kế toán đã nhập theo phiếu -> controller chặn lùi khỏi 'Hủy tại chỗ' (kể cả Desk)", raises(d.validate) is not None)
+    d = lo(trang_thai="Hủy tại chỗ", _before=lo(trang_thai="Tạo yêu cầu"))
+    d.before_validate()
+    check("kế toán đã mở phiếu -> controller chặn chuyển sang 'Hủy tại chỗ'", raises(d.validate) is not None)
+    KIEM.clear()
+    check("chặng tổng: hủy tại chỗ chưa phiếu = 'Đã kiểm hàng'; có phiếu = chặng phiếu; site chưa có kế toán = 'Hủy tại chỗ'",
+          lo_mod.chang_tong("Hủy tại chỗ") == "Đã kiểm hàng" and lo_mod.chang_tong("Hủy tại chỗ", "Xong") == "Xong"
+          and lo_mod.chang_tong("Hủy tại chỗ", None, co_ke_toan=False) == "Hủy tại chỗ"
+          and lo_mod.chang_tong("Tạo yêu cầu") == "Tạo yêu cầu")
+    join, expr = api._join_kiem()
+    check("SQL danh sách cùng luật: hủy tại chỗ chưa phiếu -> 'Đã kiểm hàng'",
+          "l.trang_thai = %(htc)s THEN %(da_kiem)s" in expr)
+    LIST_ROWS[:] = [dict(name="TH-HT", chang="Đã kiểm hàng", trang_thai="Hủy tại chỗ", ngay_yeu_cau="2026-10-01")]
+    SQL_LOG.clear()
+    api.list_lo()
+    q, pr = next((q, pr) for q, pr in reversed(SQL_LOG) if "ORDER BY FIELD" in q)
+    thu_tu = [pr.get(f"c{i}") for i in range(12) if f"c{i}" in pr]
+    check("danh sách truyền tham số luật + 'Hủy tại chỗ' có chỗ trong thứ tự (không nổi lên đầu ở site chưa có kế toán)",
+          pr.get("htc") == "Hủy tại chỗ" and pr.get("da_kiem") == "Đã kiểm hàng"
+          and "Hủy tại chỗ" in thu_tu and thu_tu.index("Hủy tại chỗ") == thu_tu.index("Đã nhận hàng") + 1, str(thu_tu))
+    LIST_ROWS.clear()
+    LOTS["TH-HT"] = lo(name="TH-HT", trang_thai="Hủy tại chỗ", huy_tai_cho_luc="2026-10-18 09:00:00",
+                       huy_tai_cho_boi="Điều hành", modified="2026-10-18 09:00:00")
+    api.huy_lo("TH-HT", "Siêu thị không hủy nữa, rút yêu cầu")
+    api.khoi_phuc_lo("TH-HT")
+    check("hủy yêu cầu một lô hủy tại chỗ rồi Khôi phục -> về lại 'Hủy tại chỗ' (không rơi về Tạo yêu cầu)",
+          LOTS["TH-HT"].trang_thai == "Hủy tại chỗ", LOTS["TH-HT"].trang_thai)
+    r = api.get_lo("TH-HT")
+    check("get_lo: lô hủy tại chỗ trả chặng 'Đã kiểm hàng' + dấu ai / lúc nào",
+          r["chang"] == "Đã kiểm hàng" and r.get("huy_tai_cho_boi") == "Điều hành" and r.get("huy_tai_cho_luc"))
+    ui = open(os.path.join(PUB, "components", "thu-hoi-ui.js"), encoding="utf-8").read()
+    check("DocType: trạng thái có 'Hủy tại chỗ'; dấu ai / lúc nào là field CHỈ ĐỌC; màn hình dùng ĐÚNG chữ đó",
+          "Hủy tại chỗ" in fields["trang_thai"]["options"].split("\n")
+          and all(fields.get(f, {}).get("read_only") for f in ("huy_tai_cho_luc", "huy_tai_cho_boi"))
+          and lo_mod.HUY_TAI_CHO == "Hủy tại chỗ" and 'export const HUY_TAI_CHO = "Hủy tại chỗ";' in ui)
 
     print("=" * 78)
     print("ĐẠT" if ok_all else "CÓ MỤC ĐỎ")

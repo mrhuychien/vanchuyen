@@ -1685,6 +1685,34 @@
 	box-shadow: 0 0 0 2px var(--vc-surface), 0 0 0 3px currentColor;
 	color: var(--vc-text-3);
 }
+/* Hủy tại chỗ: nấc bỏ qua (lấy hàng, nhận hàng, đếm hàng) gạch chéo — khác "chưa tới". */
+.vc-th-step-skip {
+	background: repeating-linear-gradient(135deg, #cbd5e1 0 2px, transparent 2px 5px);
+}
+.vc-th-badges {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 4px;
+}
+.vc-badge-htc {
+	background: #ffedd5;
+	color: #9a3412;
+}
+.vc-th-htc-box {
+	padding: 0.6rem 0.75rem;
+	border-radius: var(--vc-radius-sm);
+	background: #fff7ed;
+	border: 1px solid #fed7aa;
+	color: #7c2d12;
+	font-size: 0.85rem;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.vc-th-btn-htc {
+	color: #c2410c;
+}
 .vc-th-sec {
 	margin-bottom: 0.75rem;
 }

@@ -6,6 +6,8 @@ tiết hàng là bản dán nguyên văn từ mail siêu thị. App này giữ b
 Đã lấy hàng → Đã nhận hàng); kế toán tiếp nối bằng phiếu kiểm hàng bên ketoan (mã + số
 lượng chính xác ở đó), và mọi danh sách ở đây hiện TRẠNG THÁI TỔNG bằng cách đọc mềm phiếu.
 Hủy yêu cầu (`huy_lo`) giữ lô ở "Đã hủy" kèm lý do — không xóa; `khoi_phuc_lo` khi hủy nhầm.
+Hủy TẠI CHỖ (siêu thị hủy hàng, công ty không thu) là một chặng: `chuyen_chang(…, "Hủy tại chỗ")`
+từ "Tạo yêu cầu" — lô đi tắt sang kế toán ở "Đã kiểm hàng" (nhận đủ theo phiếu).
 
 Quyền: DocType chỉ cấp System Manager (như `Su Co Van Chuyen`). Mọi method gọi `_require()`
 ở dòng đầu — điều hành (quyền ghi Sales Invoice), tổ trưởng, quản trị — rồi mới
@@ -29,11 +31,15 @@ from vanchuyen.api.guards import is_admin, is_to_truong
 from vanchuyen.api.nhap_don import _ten_key
 from vanchuyen.van_chuyen.doctype.lo_thu_hoi.lo_thu_hoi import (
 	CHANG,
+	CHANG_KE_TOAN,
 	DA_HUY,
+	DA_KIEM,
 	DANG_KIEM,
+	HUY_TAI_CHO,
 	KIEM_DT,
 	TAO,
 	TRANG_THAI,
+	chang_tong,
 	format_dia_chi,
 	phieu_kiem,
 )
@@ -58,10 +64,11 @@ _LIST_COLS = (
 	"don_vi_thu_hoi", "ma_van_don", "ngay_hen_lay", "lay_luc", "nhan_luc",
 	"so_kien_du_kien", "so_kien_nhan", "so_dinh_kem", "ly_do_huy", "huy_luc", "huy_boi",
 )
-_DATE_COLS = ("ngay_yeu_cau", "ngay_hen_lay", "lay_luc", "nhan_luc", "huy_luc")
-# Thứ tự xếp danh sách: 7 chặng rồi tới lô ĐÃ HỦY ở CUỐI — FIELD() trả 0 cho giá trị không
-# có trong danh sách, tức là xếp lên ĐẦU; quên "Đã hủy" ở đây là lô hủy nổi lên trên cùng.
-_THU_TU = CHANG + (DA_HUY,)
+_DATE_COLS = ("ngay_yeu_cau", "ngay_hen_lay", "lay_luc", "nhan_luc", "huy_luc", "huy_tai_cho_luc")
+# Thứ tự xếp danh sách: 7 chặng (+ "Hủy tại chỗ" — chỉ hiện khi site chưa cài ketoan, xem
+# `chang_tong`) rồi tới lô ĐÃ HỦY ở CUỐI — FIELD() trả 0 cho giá trị không có trong danh
+# sách, tức là xếp lên ĐẦU; quên một giá trị ở đây là lô đó nổi lên trên cùng.
+_THU_TU = TRANG_THAI + (HUY_TAI_CHO,) + CHANG_KE_TOAN + (DA_HUY,)
 
 # Đính kèm: ảnh, PDF, bảng tính, văn bản, mail, file nén. KHÔNG nhận loại trình duyệt chạy
 # được script (html / svg / xml / js…) — proxy `xem_dinh_kem` phục vụ file trên CHÍNH tên miền
@@ -110,9 +117,11 @@ def _join_kiem():
 	"""
 	if not frappe.db.table_exists(KIEM_DT):
 		return "", "l.trang_thai"
+	# Lô hủy tại chỗ chưa có phiếu: "Đã kiểm hàng" (nhận đủ theo phiếu) — cùng luật chang_tong().
 	return (
 		f"LEFT JOIN `tab{KIEM_DT}` k ON k.lo_thu_hoi = l.name",
-		"(CASE WHEN k.name IS NULL THEN l.trang_thai "
+		"(CASE WHEN k.name IS NULL THEN "
+		"(CASE WHEN l.trang_thai = %(htc)s THEN %(da_kiem)s ELSE l.trang_thai END) "
 		"WHEN IFNULL(k.trang_thai, '') = '' THEN %(dang_kiem)s ELSE k.trang_thai END)",
 	)
 
@@ -137,7 +146,7 @@ def list_lo(chang=None, tim=None, tu_ngay=None, den_ngay=None, page=1, page_size
 	page = cint(page) or 1
 	page_size = min(cint(page_size) or 30, 100)
 	join, expr = _join_kiem()
-	p = {"dang_kiem": DANG_KIEM, "xong": XONG, "huy": DA_HUY}
+	p = {"dang_kiem": DANG_KIEM, "xong": XONG, "huy": DA_HUY, "htc": HUY_TAI_CHO, "da_kiem": DA_KIEM}
 	conds = ["1 = 1"]
 	if cstr(tim).strip():
 		p["q"] = "%" + cstr(tim).strip() + "%"
@@ -220,14 +229,18 @@ def _files(name):
 
 def _lo_dict(name):
 	doc = frappe.get_doc(DT, name)
-	d = {f: doc.get(f) for f in _LIST_COLS + _UPDATABLE + ("customer_name", "sdt_diem", "lay_boi", "nhan_boi", "huy_tu")}
+	d = {
+		f: doc.get(f)
+		for f in _LIST_COLS + _UPDATABLE
+		+ ("customer_name", "sdt_diem", "lay_boi", "nhan_boi", "huy_tu", "huy_tai_cho_luc", "huy_tai_cho_boi")
+	}
 	d["name"] = doc.name
 	_str_dates(d)
 	d["files"] = _files(doc.name)
 	kt = phieu_kiem([doc.name]).get(doc.name)
-	d["chang"] = kt or doc.trang_thai
-	d["khoa_ke_toan"] = bool(kt)
 	d["co_ke_toan"] = bool(frappe.db.table_exists(KIEM_DT))
+	d["chang"] = chang_tong(doc.trang_thai, kt, d["co_ke_toan"])
+	d["khoa_ke_toan"] = bool(kt)
 	d["chang_list"] = list(CHANG)
 	d["modified"] = str(doc.modified)
 	return d
@@ -334,15 +347,33 @@ def _dat_chang(doc, moi, so_kien_nhan=None):
 	Nhảy cóc "Tạo yêu cầu → Đã nhận hàng" là thật: siêu thị tự chở hàng về, hay xe khác
 	ghé lấy hộ. Đóng dấu cả chặng lấy hàng để dòng thời gian không thủng một mốc.
 	Lùi thì `LoThuHoi._khoa_khi_ke_toan_da_kiem` chặn khi kế toán đã đếm hàng.
+
+	"Hủy tại chỗ" là NHÁNH riêng: chỉ từ "Tạo yêu cầu" (đã có người đi lấy thì không còn là
+	hủy tại chỗ), và chỉ lùi về "Tạo yêu cầu" — không có mốc lấy / nhận nào để đóng dấu.
 	"""
+	ai = frappe.utils.get_fullname(frappe.session.user) or frappe.session.user
+	luc = now_datetime()
+	if moi == HUY_TAI_CHO or doc.trang_thai == HUY_TAI_CHO:
+		if moi == doc.trang_thai:
+			return
+		if moi == HUY_TAI_CHO and doc.trang_thai != TAO:
+			frappe.throw(
+				_("Chỉ lô còn 'Tạo yêu cầu' (chưa ai đi lấy) mới chuyển sang 'Hủy tại chỗ' được.")
+			)
+		if doc.trang_thai == HUY_TAI_CHO and moi != TAO:
+			frappe.throw(_("Lô hủy tại chỗ chỉ lùi về 'Tạo yêu cầu' được."))
+		if moi == HUY_TAI_CHO:
+			doc.huy_tai_cho_luc, doc.huy_tai_cho_boi = luc, ai
+		else:
+			doc.huy_tai_cho_luc = doc.huy_tai_cho_boi = None
+		doc.trang_thai = moi
+		return
 	if moi not in TRANG_THAI:
 		frappe.throw(_("Chặng vận chuyển không hợp lệ: {0}").format(moi))
 	cu = doc.trang_thai if doc.trang_thai in TRANG_THAI else TAO
 	if moi == cu:
 		return
 	i_moi, i_cu = TRANG_THAI.index(moi), TRANG_THAI.index(cu)
-	ai = frappe.utils.get_fullname(frappe.session.user) or frappe.session.user
-	luc = now_datetime()
 	if i_moi > i_cu:
 		if i_moi >= 1 and not doc.lay_luc:
 			doc.lay_luc, doc.lay_boi = luc, ai
@@ -402,7 +433,7 @@ def save_lo(payload, name=None):
 
 @frappe.whitelist()
 def chuyen_chang(name, trang_thai, so_kien_nhan=None):
-	"""Điều phối / điều hành chuyển chặng vận chuyển (tiến hoặc lùi)."""
+	"""Điều phối / điều hành chuyển chặng vận chuyển (tiến hoặc lùi), kể cả "Hủy tại chỗ"."""
 	_require()
 	doc = frappe.get_doc(DT, name)
 	_chan_lo_huy(doc)
@@ -494,7 +525,7 @@ def khoi_phuc_lo(name):
 	doc = frappe.get_doc(DT, name, for_update=True)
 	if doc.trang_thai != DA_HUY:
 		frappe.throw(_("Lô {0} không ở trạng thái 'Đã hủy'.").format(name))
-	doc.trang_thai = doc.huy_tu if doc.huy_tu in TRANG_THAI else TAO
+	doc.trang_thai = doc.huy_tu if doc.huy_tu in TRANG_THAI + (HUY_TAI_CHO,) else TAO
 	doc.save(ignore_permissions=True)
 	return _lo_dict(doc.name)
 

@@ -66,6 +66,12 @@ phiếu kiểm thì khách / điểm bị khóa, không lùi chặng, xóa hay h
 **Hủy yêu cầu** (siêu thị rút yêu cầu, lập trùng, không lấy được hàng…): lô GIỮ LẠI ở
 **Đã hủy** kèm lý do (bắt buộc) · ai · lúc nào · chặng lúc hủy — không xóa. Lô hủy chỉ xem
 (vẫn đính kèm thêm được), không tính vào "Đang mở"; **Khôi phục** đưa về đúng chặng cũ.
+
+**Hủy tại chỗ** (lô hàng date báo về quá ít, siêu thị hủy luôn — không thu về): bấm **Hủy
+tại chỗ (không thu)** khi lô còn *Tạo yêu cầu* → lô đi tắt sang chặng **Đã kiểm hàng**
+(nhận đủ theo phiếu), không qua lấy / nhận hàng; kế toán nhập chứng từ theo phiếu / biên
+bản hủy rồi lập hóa đơn trả về như thường. Bấm nhầm thì lùi về *Tạo yêu cầu* khi kế toán
+chưa mở phiếu.
 Thiết kế đầy đủ: [`docs/thu-hoi/blueprint-thu-hoi.md`](docs/thu-hoi/blueprint-thu-hoi.md).
 Cài / cập nhật bản này cần `bench --site <site> migrate`.
 

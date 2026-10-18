@@ -19,6 +19,9 @@ NHỮNG ĐIỀU MÀN HÌNH HỨA
    gạt ngay ở máy (không tải lên), file Excel gửi NGUYÊN (không bị "nén ảnh"); thẻ file Excel
    có biểu tượng Excel và tải về (`download`), PDF mở tab mới.
 5. **Màn lái xe #/chuyen không còn khối "Lấy hàng thu hồi"** — không gọi API thu hồi nào.
+5a. **Hủy TẠI CHỖ (siêu thị hủy, không thu)**: lô còn "Tạo yêu cầu" có nút, bấm thì hỏi lại;
+   xong thì chặng tổng "Đã kiểm hàng" + nhãn "Hủy tại chỗ", thanh 7 nấc vẽ 3 nấc giữa là bỏ
+   qua, khối điều phối ẩn, chỉ còn "Lùi về Tạo yêu cầu"; lô kế toán đã kiểm không có nút.
 5b. **Hủy yêu cầu có lý do, lô giữ lại chỉ xem, Khôi phục về đúng chặng.** Không lý do thì
    không gọi server; lô hủy khóa ô nhập / nút Lưu / chuyển chặng nhưng ô mail dán vẫn đọc,
    cuộn, copy được (readonly) và vẫn đính kèm thêm được; danh sách: "Đang mở" không đếm lô
@@ -138,7 +141,15 @@ MOCK_JS = r"""
         p, { name:n, customer_name:"Saigon Co.op", ten_diem:d.ten, ma_diem:d.ma, dia_chi:d.dia_chi });
       return detail(n);
     },
-    "vanchuyen.api.thu_hoi.chuyen_chang": (a) => { lots[a.name].trang_thai = lots[a.name].chang = a.trang_thai; return detail(a.name); },
+    "vanchuyen.api.thu_hoi.chuyen_chang": (a) => {
+      const l = lots[a.name];
+      l.trang_thai = a.trang_thai;
+      // như server (chang_tong): hủy tại chỗ chưa phiếu -> "Đã kiểm hàng" (nhận đủ theo phiếu)
+      l.chang = a.trang_thai === "Hủy tại chỗ" ? "Đã kiểm hàng" : a.trang_thai;
+      Object.assign(l, a.trang_thai === "Hủy tại chỗ" ? { huy_tai_cho_luc: "2026-10-18 09:00:00", huy_tai_cho_boi: "Điều hành" }
+        : { huy_tai_cho_luc: null, huy_tai_cho_boi: null });
+      return detail(a.name);
+    },
     "vanchuyen.api.thu_hoi.huy_lo": (a) => {
       const l = lots[a.name];
       Object.assign(l, { huy_tu: l.trang_thai, trang_thai: "Đã hủy", chang: "Đã hủy", ly_do_huy: a.ly_do,
@@ -366,6 +377,52 @@ def run(pw, exe, root, shots, ok, bad):
            and "Kế toán đã mở phiếu kiểm" in p.text_content("main"))
     expect("lô kế toán đã kiểm: KHÔNG có nút Hủy, chỉ đường nhờ kế toán xóa phiếu kiểm trước",
            p.query_selector("#th-huy") is None and "xóa phiếu kiểm trước" in p.text_content("main"))
+    expect("lô kế toán đã kiểm: KHÔNG có nút 'Hủy tại chỗ'", p.query_selector('[data-chang="Hủy tại chỗ"]') is None)
+    # Phiếu kiểm tạo tay trên Desk khi lô còn "Tạo yêu cầu" — lô bị khóa dù chưa ai đi lấy
+    p.evaluate("Object.assign(window.__lots['TH-2026-0001'], {khoa_ke_toan: true, chang: 'Đang kiểm'})")
+    p.evaluate("location.hash = '#/thu-hoi/TH-2026-0001'")
+    p.wait_for_timeout(600)
+    expect("phiếu kiểm tạo tay khi lô còn 'Tạo yêu cầu': KHÔNG có nút 'Hủy tại chỗ' (kế toán đã mở phiếu)",
+           "Kế toán đã mở phiếu kiểm" in p.text_content("main") and p.query_selector('[data-chang="Hủy tại chỗ"]') is None)
+    p.close()
+
+    # 4a. Hủy TẠI CHỖ: siêu thị hủy hàng, không thu — đi tắt sang kế toán ở "Đã kiểm hàng"
+    p = mo(DIEU_HANH, "#/thu-hoi/TH-2026-0001")
+    expect("lô còn 'Tạo yêu cầu': có nút 'Hủy tại chỗ (không thu)'", p.query_selector('[data-chang="Hủy tại chỗ"]') is not None)
+    p.click('[data-chang="Hủy tại chỗ"]')
+    p.wait_for_timeout(200)
+    hoi = p.text_content(".vc-modal-content") if p.query_selector(".vc-modal-content") else ""
+    expect("bấm 'Hủy tại chỗ': HỎI LẠI trước, nói rõ đi tắt sang kế toán 'Đã kiểm hàng'",
+           "Đã kiểm hàng" in hoi and "KHÔNG" in hoi and not calls(p, "vanchuyen.api.thu_hoi.chuyen_chang"), hoi[:120])
+    p.click("[data-vc-ok]")
+    p.wait_for_timeout(500)
+    cc = calls(p, "vanchuyen.api.thu_hoi.chuyen_chang")
+    expect("đồng ý: gửi chuyen_chang 'Hủy tại chỗ'", bool(cc) and cc[-1]["args"].get("trang_thai") == "Hủy tại chỗ", str(cc))
+    head = p.text_content(".vc-order-head")
+    m = p.text_content("main")
+    expect("lô hủy tại chỗ: chặng tổng 'Đã kiểm hàng' + nhãn 'Hủy tại chỗ' + khung 'không thu về' (ai · lúc nào)",
+           "Đã kiểm hàng" in head and "Hủy tại chỗ" in head and "không thu về" in m and "Điều hành" in m, head)
+    expect("thanh 7 nấc: đúng 3 nấc giữa (lấy hàng, nhận hàng, đếm) vẽ BỎ QUA",
+           len(p.query_selector_all(".vc-order-head ~ .vc-th-steps .vc-th-step-skip")) == 3)
+    expect("khối 'Điều phối thu hồi' + dòng 'Thu hồi: đơn vị · vận đơn' ẩn (không ai đi lấy)",
+           "Điều phối thu hồi" not in m and "Viettel Post" not in p.text_content(".vc-detail-list"))
+    expect("chỉ còn 'Lùi về Tạo yêu cầu' — hết nút Hủy tại chỗ / Đã lấy hàng",
+           p.query_selector('[data-chang="Tạo yêu cầu"]') is not None and p.query_selector('[data-chang="Hủy tại chỗ"]') is None
+           and p.query_selector('[data-chang="Đã lấy hàng"]') is None)
+    if shots:
+        p.screenshot(path=os.path.join(shots, "vc_htc.png"), full_page=True)
+    p.evaluate("location.hash = '#/thu-hoi'")
+    p.wait_for_timeout(600)
+    the = p.query_selector('.vc-order-card:has(a[href="#/thu-hoi/TH-2026-0001"])')
+    expect("danh sách: thẻ lô có nhãn 'Hủy tại chỗ' + 3 nấc bỏ qua, không nút chuyển chặng nhanh",
+           the is not None and "Hủy tại chỗ" in the.text_content() and len(the.query_selector_all(".vc-th-step-skip")) == 3
+           and not the.query_selector("[data-tien]"))
+    p.evaluate("location.hash = '#/thu-hoi/TH-2026-0001'")
+    p.wait_for_timeout(600)
+    p.click('[data-chang="Tạo yêu cầu"]')
+    p.wait_for_timeout(500)
+    expect("lùi về 'Tạo yêu cầu': hiện lại điều phối + nút Hủy tại chỗ",
+           "Điều phối thu hồi" in p.text_content("main") and p.query_selector('[data-chang="Hủy tại chỗ"]') is not None)
     p.close()
 
     # 4b. Hủy yêu cầu → lô chỉ xem → Khôi phục; danh sách đếm đúng

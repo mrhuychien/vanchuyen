@@ -42,6 +42,8 @@
   "nhan_luc",
   "nhan_boi",
   "so_kien_nhan",
+  "huy_tai_cho_luc",
+  "huy_tai_cho_boi",
   "sec_huy",
   "ly_do_huy",
   "huy_tu",
@@ -68,7 +70,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Trạng thái vận chuyển",
-   "options": "Tạo yêu cầu\nĐã lấy hàng\nĐã nhận hàng\nĐã hủy",
+   "options": "Tạo yêu cầu\nĐã lấy hàng\nĐã nhận hàng\nHủy tại chỗ\nĐã hủy",
    "read_only": 1
   },
   {
@@ -265,6 +267,21 @@
    "label": "Số kiện thực nhận"
   },
   {
+   "depends_on": "eval:doc.trang_thai=='Hủy tại chỗ'",
+   "description": "Siêu thị hủy hàng tại chỗ, công ty không thu về — kế toán nhập chứng từ theo phiếu",
+   "fieldname": "huy_tai_cho_luc",
+   "fieldtype": "Datetime",
+   "label": "Lúc xác nhận hủy tại chỗ",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.trang_thai=='Hủy tại chỗ'",
+   "fieldname": "huy_tai_cho_boi",
+   "fieldtype": "Data",
+   "label": "Người xác nhận hủy tại chỗ",
+   "read_only": 1
+  },
+  {
    "depends_on": "eval:doc.trang_thai=='Đã hủy'",
    "fieldname": "sec_huy",
    "fieldtype": "Section Break",
@@ -303,7 +320,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 0,
  "links": [],
- "modified": "2026-10-17 14:00:00",
+ "modified": "2026-10-18 10:00:00",
  "module": "Van Chuyen",
  "name": "Lo Thu Hoi",
  "naming_rule": "By \"Naming Series\" field",

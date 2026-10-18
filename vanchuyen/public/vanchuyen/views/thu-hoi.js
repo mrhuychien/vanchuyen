@@ -5,7 +5,7 @@ import { call, errText } from "../lib/api.js";
 import { skeleton } from "../lib/dom.js";
 import { escapeHtml, formatDate, formatQty } from "../lib/format.js";
 import { showToast } from "../components/toast.js";
-import { CHANG_FALLBACK, DA_HUY, changBadge, changBar, huyLine } from "../components/thu-hoi-ui.js";
+import { CHANG_FALLBACK, DA_HUY, HUY_TAI_CHO, changBadge, changBar, htcTag, huyLine } from "../components/thu-hoi-ui.js";
 
 const S = { chang: "dang_mo", tim: "", page: 1, data: { rows: [], counts: {} } };
 
@@ -66,7 +66,8 @@ function drawPills(container) {
 	const c = S.data.counts || {};
 	const ds = S.data.chang_list || CHANG_FALLBACK;
 	const huy = c[DA_HUY] || 0;
-	const tong = ds.reduce((a, k) => a + (c[k] || 0), 0) + huy;
+	// Cộng MỌI chặng server đếm (cả "Hủy tại chỗ" ở site chưa cài kế toán), không chỉ 7 pill.
+	const tong = Object.values(c).reduce((a, n) => a + (Number(n) || 0), 0);
 	const mo = tong - (c["Xong"] || 0) - huy; // "Đang mở" = chưa Xong, chưa hủy — đúng như server lọc
 	const pill = (key, label, n) =>
 		`<button class="${S.chang === key ? "vc-active" : ""}" data-f="${escapeHtml(key)}">${escapeHtml(label)} (${n})</button>`;
@@ -132,9 +133,9 @@ function card(r) {
 				<div class="vc-order-cust">🏬 ${escapeHtml(r.ten_diem || r.customer_name || r.name)}</div>
 				<div class="vc-order-addr">${escapeHtml(r.customer_name || "")}${r.ma_diem ? " · " + escapeHtml(r.ma_diem) : ""}${r.so_phieu_sieu_thi ? " · phiếu " + escapeHtml(r.so_phieu_sieu_thi) : ""}</div>
 			</div>
-			${changBadge(r.chang, ds)}
+			<div class="vc-th-badges">${changBadge(r.chang, ds)}${r.trang_thai === HUY_TAI_CHO ? htcTag() : ""}</div>
 		</div>
-		${changBar(r.chang, ds)}
+		${changBar(r.chang, ds, r.trang_thai === HUY_TAI_CHO)}
 		${r.chang === DA_HUY ? huyLine(r) : ""}
 		${r.dia_chi ? `<div class="vc-text-sm vc-text-muted vc-mt-1">📍 ${escapeHtml(r.dia_chi)}</div>` : ""}
 		<div class="vc-text-sm vc-mt-1">📅 ${escapeHtml(formatDate(r.ngay_yeu_cau))}${tuoi} · ${escapeHtml(r.name)}${r.ly_do ? " · " + escapeHtml(r.ly_do) : ""}</div>

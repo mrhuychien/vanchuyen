@@ -43,6 +43,17 @@ Siêu thị rút yêu cầu, lập trùng, đơn vị vận chuyển không lấ
 lý do + ai / lúc nào + chặng trước khi hủy (`huy_tu`, để Khôi phục về đúng chỗ). Xóa thì
 mất luôn câu trả lời cho "lô này đi đâu rồi". "Đã hủy" KHÔNG phải một nấc của 7 chặng:
 lô dừng hẳn, không tính vào "đang mở". Chỉ hủy được khi kế toán CHƯA mở phiếu kiểm.
+
+════════════════════════════════════════════════════════════════════════════
+HỦY TẠI CHỖ — siêu thị hủy hàng, công ty KHÔNG thu về (khác hẳn "Hủy yêu cầu")
+════════════════════════════════════════════════════════════════════════════
+
+Hàng date quá ít, không đáng một chuyến: siêu thị hủy tại chỗ (biên bản hủy), công ty
+vẫn phải lập hóa đơn trả về cho đúng số trên phiếu. Lô còn "Tạo yêu cầu" (chưa ai đi lấy)
+bấm "Hủy tại chỗ" thì ĐI TẮT: bỏ qua Đã lấy hàng / Đã nhận hàng / đếm hàng, chặng tổng
+đứng ở "Đã kiểm hàng" (nhận đủ theo phiếu) — `chang_tong()` — chờ kế toán nhập chứng từ.
+Kế toán chép mã + số theo phiếu của siêu thị (không đếm), rồi lập hóa đơn trả về như lô
+thường. Lùi về "Tạo yêu cầu" được khi kế toán chưa mở phiếu.
 """
 
 import frappe
@@ -56,11 +67,13 @@ DA_NHAN = "Đã nhận hàng"
 TRANG_THAI = (TAO, DA_LAY, DA_NHAN)
 DA_HUY = "Đã hủy"  # ngoài tiến trình — xem "HỦY YÊU CẦU" ở đầu file
 _DAU_HUY = ("ly_do_huy", "huy_boi", "huy_luc", "huy_tu")
+HUY_TAI_CHO = "Hủy tại chỗ"  # đi tắt sang kế toán — xem "HỦY TẠI CHỖ" ở đầu file
 
 # Phiếu kiểm hàng bên ketoan — CHỈ ĐỌC, và đọc MỀM.
 KIEM_DT = "Kiem Hang Thu Hoi"
 DANG_KIEM = "Đang kiểm"
-CHANG_KE_TOAN = (DANG_KIEM, "Đã kiểm hàng", "Đã nhập chứng từ", "Xong")
+DA_KIEM = "Đã kiểm hàng"
+CHANG_KE_TOAN = (DANG_KIEM, DA_KIEM, "Đã nhập chứng từ", "Xong")
 # Thứ tự 7 chặng tổng. Một chỗ khai, mọi màn đọc — xếp danh sách, vẽ pill, vẽ
 # thanh tiến độ đều theo đúng thứ tự này.
 CHANG = TRANG_THAI + CHANG_KE_TOAN
@@ -86,6 +99,17 @@ def phieu_kiem(lo_names):
 		as_dict=True,
 	)
 	return {r.lo_thu_hoi: cstr(r.trang_thai) or DANG_KIEM for r in rows}
+
+
+def chang_tong(trang_thai, kiem=None, co_ke_toan=True):
+	"""Chặng TỔNG của một lô: phiếu kiểm bên ketoan nếu có; lô HỦY TẠI CHỖ chưa có phiếu đứng
+	ở "Đã kiểm hàng" (nhận đủ theo phiếu, chờ kế toán nhập chứng từ) — site chưa cài ketoan
+	thì không có ai nhận, để nguyên "Hủy tại chỗ"."""
+	if kiem:
+		return kiem
+	if trang_thai == HUY_TAI_CHO and co_ke_toan:
+		return DA_KIEM
+	return trang_thai
 
 
 def dia_chi_cua_khach(address, customer):
@@ -144,7 +168,7 @@ class LoThuHoi(Document):
 		) if self.name and not self.is_new() else 0
 
 	def validate(self):
-		if self.trang_thai not in TRANG_THAI + (DA_HUY,):
+		if self.trang_thai not in TRANG_THAI + (HUY_TAI_CHO, DA_HUY):
 			frappe.throw(_("Trạng thái vận chuyển không hợp lệ: {0}").format(self.trang_thai))
 		if self.trang_thai == DA_HUY:
 			if not cstr(self.get("ly_do_huy")).strip():
@@ -203,6 +227,19 @@ class LoThuHoi(Document):
 		before = self.get_doc_before_save()
 		if not before or not phieu_kiem([self.name]):
 			return
+		if self.trang_thai == HUY_TAI_CHO and before.trang_thai != HUY_TAI_CHO:
+			frappe.throw(
+				_("Kế toán đã mở phiếu kiểm hàng cho lô {0} — không chuyển sang 'Hủy tại chỗ' được nữa.").format(
+					self.name
+				)
+			)
+		if before.trang_thai == HUY_TAI_CHO and self.trang_thai not in (HUY_TAI_CHO, DA_HUY):
+			frappe.throw(
+				_(
+					"Kế toán đã nhập hàng theo phiếu hủy của lô {0} — không lùi về chặng vận chuyển "
+					"được nữa."
+				).format(self.name)
+			)
 		if self.trang_thai == DA_HUY and before.trang_thai != DA_HUY:
 			frappe.throw(
 				_(

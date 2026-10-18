@@ -8,6 +8,14 @@ export const CHANG_FALLBACK = ["Tạo yêu cầu", "Đã lấy hàng", "Đã nh�
 export const VAN_CHUYEN = 3; // ba chặng đầu thuộc app này, bốn chặng sau thuộc kế toán
 // Hủy yêu cầu (lo_thu_hoi.DA_HUY): KHÔNG phải một nấc của thanh 7 nấc — lô dừng hẳn.
 export const DA_HUY = "Đã hủy";
+// Hủy TẠI CHỖ (lo_thu_hoi.HUY_TAI_CHO): siêu thị hủy hàng, công ty không thu — lô đi tắt từ
+// "Tạo yêu cầu" sang "Đã kiểm hàng" (nhận đủ theo phiếu); ba nấc giữa vẽ là BỎ QUA.
+export const HUY_TAI_CHO = "Hủy tại chỗ";
+const BO_QUA_HTC = new Set(["Đã lấy hàng", "Đã nhận hàng", "Đang kiểm"]);
+
+export function htcTag() {
+	return `<span class="vc-badge vc-badge-htc">🗑 Hủy tại chỗ</span>`;
+}
 
 // "2026-10-17 09:12:33.4" → "17/10 09:12". Không đi qua new Date(): Safari không đọc
 // chuỗi có dấu cách giữa ngày và giờ.
@@ -27,14 +35,16 @@ export function changBadge(chang, list = CHANG_FALLBACK) {
 }
 
 // Thanh 7 nấc: nấc đã qua tô đậm, nấc đang đứng có viền. Ba nấc đầu màu vận chuyển,
-// bốn nấc sau màu kế toán — nhìn là biết lô đang nằm ở bên nào.
-export function changBar(chang, list = CHANG_FALLBACK) {
+// bốn nấc sau màu kế toán — nhìn là biết lô đang nằm ở bên nào. Lô hủy tại chỗ (`htc`): ba
+// nấc giữa (lấy hàng, nhận hàng, đếm hàng) vẽ gạch chéo — bỏ qua, không phải "chưa tới".
+export function changBar(chang, list = CHANG_FALLBACK, htc = false) {
 	if (chang === DA_HUY) return ""; // lô hủy không có tiến độ để vẽ — huy hiệu + dòng lý do nói đủ
 	const i = list.indexOf(chang);
-	return `<div class="vc-th-steps" title="${escapeHtml(chang || "")}">${list
+	return `<div class="vc-th-steps" title="${escapeHtml(chang || "")}${htc ? " · hủy tại chỗ" : ""}">${list
 		.map((c, k) => {
 			const cls = ["vc-th-step", k < VAN_CHUYEN ? "vc-th-step-vc" : "vc-th-step-kt"];
-			if (k <= i) cls.push("vc-th-step-on");
+			if (htc && BO_QUA_HTC.has(c)) cls.push("vc-th-step-skip");
+			else if (k <= i) cls.push("vc-th-step-on");
 			if (k === i) cls.push("vc-th-step-cur");
 			return `<span class="${cls.join(" ")}"></span>`;
 		})
